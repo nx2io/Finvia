@@ -1,0 +1,7 @@
+{
+  "name": "Rimo",
+  "integrations": {
+    "capacitor": {}
+  },
+  "type": "angular-standalone"
+}
