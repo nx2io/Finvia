@@ -35,8 +35,19 @@
                 "output": "assets"
               }
             ],
-            "styles": ["src/global.scss", "src/theme/variables.scss"],
-            "scripts": [],
+            "styles": [
+              "src/global.scss",
+              "src/theme/variables.scss",
+              "node_modules/flyonui/flyonui.css"
+            ],
+            "scripts": [
+              "node_modules/lodash/lodash.min.js",
+              "node_modules/apexcharts/dist/apexcharts.js",
+              "node_modules/flyonui/dist/helper-apexcharts.js",
+              
+              "node_modules/flyonui/flyonui.js",
+              "node_modules/flyonui/dist/index.js"
+            ],
             "browser": "src/main.ts"
           },
           "configurations": {
@@ -129,7 +140,10 @@
     }
   },
   "cli": {
-    "schematicCollections": ["@ionic/angular-toolkit"]
+    "schematicCollections": [
+      "@ionic/angular-toolkit"
+    ],
+    "analytics": false
   },
   "schematics": {
     "@ionic/angular-toolkit:component": {

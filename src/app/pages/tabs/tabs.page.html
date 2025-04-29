@@ -1,0 +1,24 @@
+<ion-tabs #tabs (ionTabsDidChange)="setCurrentTab()">
+  <ion-tab-bar slot="bottom">
+    <ion-tab-button tab="home">
+      <span [ngClass]="selectedTab == 'home' ? 'icon-[solar--home-angle-bold]' : 'icon-[solar--home-angle-outline]'" class="size-8"></span>
+      <ion-label>Hmoe</ion-label>
+      <!-- <ion-icon [name]="selectedTab == 'home' ? 'home' : 'home-outline'"></ion-icon> -->
+    </ion-tab-button>
+    <ion-tab-button tab="transactions">
+      <span [ngClass]="selectedTab == 'transactions' ? 'icon-[solar--pie-chart-2-bold]' : 'icon-[solar--pie-chart-2-outline]'" class="size-8"></span>
+      <ion-label>Transactions</ion-label>
+      <!-- <ion-icon [name]="selectedTab == 'transactions' ? 'pie-chart' : 'pie-chart-outline'"></ion-icon> -->
+    </ion-tab-button>
+    <ion-tab-button tab="card">
+      <span [ngClass]="selectedTab == 'card' ? 'icon-[solar--card-2-bold]' : 'icon-[solar--card-2-outline]'" class="size-8"></span>
+      <ion-label>Cards</ion-label>
+      <!-- <ion-icon [name]="selectedTab == 'card' ? 'card' : 'card-outline'"></ion-icon> -->
+    </ion-tab-button>
+    <ion-tab-button tab="settings">
+      <span [ngClass]="selectedTab == 'settings' ? 'icon-[solar--settings-bold]' : 'icon-[solar--settings-outline]'" class="size-8"></span>
+      <ion-label>Settings</ion-label>
+      <!-- <ion-icon [name]="selectedTab == 'settings' ? 'settings' : 'settings-outline'"></ion-icon> -->
+    </ion-tab-button>
+  </ion-tab-bar>
+</ion-tabs>
