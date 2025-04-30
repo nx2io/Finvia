@@ -1,4 +1,4 @@
-import { NgClass } from '@angular/common';
+import { NgStyle } from '@angular/common';
 import { Component, EnvironmentInjector, inject, ViewChild } from '@angular/core';
 import { RouterModule } from '@angular/router';
 import { IonTabs, IonTabBar, IonTabButton, IonLabel } from '@ionic/angular/standalone';
@@ -7,7 +7,7 @@ import { IonTabs, IonTabBar, IonTabButton, IonLabel } from '@ionic/angular/stand
   selector: 'app-tabs',
   templateUrl: 'tabs.page.html',
   styleUrls: ['tabs.page.scss'],
-  imports: [IonLabel, IonTabs, IonTabBar, IonTabButton, RouterModule, NgClass ],
+  imports: [IonLabel, IonTabs, IonTabBar, IonTabButton, RouterModule, NgStyle ],
 })
 export class TabsPage {
   public environmentInjector = inject(EnvironmentInjector);

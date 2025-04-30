@@ -1,8 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Velo</string>
-    <string name="title_activity_main">Velo</string>
-    <string name="package_name">app.velo.com</string>
-    <string name="custom_url_scheme">app.velo.com</string>
-    <color name="primary_color">#006efe</color>
+    <string name="app_name">Finvia</string>
+    <string name="title_activity_main">Finvia</string>
+    <string name="package_name">app.finvia.com</string>
+    <string name="custom_url_scheme">app.finvia.com</string>
 </resources>

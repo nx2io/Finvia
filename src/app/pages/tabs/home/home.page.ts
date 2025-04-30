@@ -3,7 +3,7 @@ import SwiperCore, { SwiperOptions, Pagination } from 'swiper';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { IonicModule } from '@ionic/angular';
+import { IonContent, IonLabel, IonToolbar, IonList, IonItemGroup, IonItem, IonTitle, IonThumbnail, IonButton, IonListHeader, IonText, IonRow, IonAvatar } from '@ionic/angular/standalone';
 import { SwiperModule } from 'swiper/angular'; // Import SwiperModule
 
 import { StatusBar, Style } from '@capacitor/status-bar';
@@ -14,7 +14,7 @@ import { StatusBar, Style } from '@capacitor/status-bar';
   selector: 'app-home',
   templateUrl: './home.page.html',
   styleUrls: ['./home.page.scss'],
-  imports: [ IonicModule, CommonModule, FormsModule, SwiperModule, RouterModule] // Add SwiperModule to imports
+  imports: [IonAvatar, IonRow, IonText, IonListHeader, IonButton,  IonContent, IonLabel, IonToolbar, IonList, IonItemGroup, IonItem, IonTitle, IonThumbnail, CommonModule, FormsModule, SwiperModule, RouterModule] // Add SwiperModule to imports
 })
 export class HomePage implements OnInit, AfterContentChecked, AfterViewInit {
   accounts: any[] = [];
@@ -26,7 +26,7 @@ export class HomePage implements OnInit, AfterContentChecked, AfterViewInit {
   constructor() { }
 
   async ngOnInit() {
-    await this.setStatusBarStyle();
+    // await this.setStatusBarStyle();
     this.accounts = [
       { id: 1, acc_no: '57868945098', balance: '200000', currency: 'USD' },
       { id: 2, acc_no: '20067091201', balance: '50000', currency: 'INR' },
@@ -54,12 +54,12 @@ export class HomePage implements OnInit, AfterContentChecked, AfterViewInit {
   }
 
   async ngAfterViewInit() {
-    await this.setStatusBarStyle();
+    // await this.setStatusBarStyle();
   }
 
-  private async setStatusBarStyle() {
-    await StatusBar.setStyle({ style: Style.Dark });
-  }
+  // private async setStatusBarStyle() {
+  //   await StatusBar.setStyle({ style: Style.Dark });
+  // }
 
   ngAfterContentChecked() {
     this.bannerConfig = {

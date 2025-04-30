@@ -33,11 +33,11 @@
  */
 
 /* @import "@ionic/angular/css/palettes/dark.always.css"; */
- @import "@ionic/angular/css/palettes/dark.class.css";
+/* @import "@ionic/angular/css/palettes/dark.class.css"; */
 /* @import '@ionic/angular/css/palettes/dark.system.css'; */
 
 /* You can add global styles to this file, and also import other style files */
-@import "tailwindcss";
+// @import "tailwindcss";
 // @import "../node_modules/flyonui/flyonui.css";
 // @import "../node_modules/flyonui/variants.css";
 
@@ -51,7 +51,7 @@
 // /* @import "flyonui/src/vendor/fullcalendar.css"; */
 // /* @import "flyonui/src/vendor/raty.css"; */
 // /* @import "flyonui/src/vendor/waves.css"; */
-@plugin "@iconify/tailwind4";
+// @plugin "@iconify/tailwind4";
 
 // @import 'swiper/css/bundle';
 @import 'swiper/scss';
@@ -124,7 +124,16 @@ ion-list.transactions {
     background: var(--ion-color-dark);
     padding-bottom: 4rem;
     ion-list-header {
-        padding-inline-start: 3.5vh;
+        padding-inline-start: 0;
+      }
+    ion-modal.ios {
+        ion-datetime.ios {
+            background: #212429;
+            --background-rgb: var(--ion-color-dark-rgb);
+
+            border-radius: 16px;
+            box-shadow: rgba(var(--ion-color-dark-rgb), 0.3) 0px 10px 15px -3px;
+        }
     }
     ion-list-header, ion-item {
         ion-label {

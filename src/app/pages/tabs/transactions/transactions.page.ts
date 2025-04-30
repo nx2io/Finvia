@@ -1,7 +1,7 @@
 import { Component, OnInit, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { IonicModule } from '@ionic/angular';
+import { IonContent, IonHeader, IonLabel, IonSearchbar, IonToolbar, IonList, IonItemGroup, IonItem, IonSegmentButton, IonSegment, IonTitle, IonThumbnail, IonSegmentContent, IonSegmentView, IonText, IonDatetimeButton, IonModal, IonDatetime, IonChip } from '@ionic/angular/standalone';
 
 import { StatusBar, Style } from '@capacitor/status-bar';
 
@@ -11,9 +11,9 @@ import { StatusBar, Style } from '@capacitor/status-bar';
   templateUrl: './transactions.page.html',
   styleUrls: ['./transactions.page.scss'],
   standalone: true,
-  imports: [IonicModule, CommonModule, FormsModule],
+  imports: [IonChip, IonDatetime, IonModal, IonDatetimeButton, IonText, IonContent, IonHeader, IonLabel, IonSearchbar, IonToolbar, IonList, IonItemGroup, IonItem, IonSegmentButton, IonSegment, IonTitle, IonThumbnail, IonSegmentContent, IonSegmentView, CommonModule, FormsModule],
 })
-export class TransactionsPage implements OnInit, AfterViewInit {
+export class TransactionsPage implements OnInit {
   allTransactions: any[] = [];
   features: any[] = [];
   transactionsIn: any[] = [];
@@ -26,7 +26,7 @@ export class TransactionsPage implements OnInit, AfterViewInit {
   constructor() {}
 
   async ngOnInit() {
-    await this.setStatusBarStyle();
+    // await this.setStatusBarStyle();
 
     this.allTransactions = [
       { id: 1, to: 'Piyush Ag.', date: '2022-05-22', amount: 5000 },
@@ -102,13 +102,13 @@ export class TransactionsPage implements OnInit, AfterViewInit {
     this.filterTransactions();
   }
 
-  async ngAfterViewInit() {
-    await this.setStatusBarStyle();
-  }
+  // async ngAfterViewInit() {
+  //   // await this.setStatusBarStyle();
+  // }
 
-  private async setStatusBarStyle() {
-    await StatusBar.setStyle({ style: Style.Dark });
-  }
+  // private async setStatusBarStyle() {
+  //   await StatusBar.setStyle({ style: Style.Dark });
+  // }
 
   handleInput(event: Event) {
     const target = event.target as HTMLIonSearchbarElement;

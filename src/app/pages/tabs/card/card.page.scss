@@ -1,7 +1,9 @@
 ion-toolbar {
-    padding-top: 5vh;
+    --padding-top: 5vh;
+    --padding-bottom: 16px;
     --padding-start: 16px;
     --padding-end: 16px;
+    --background: var(--ion-color-dark-shade);
     ion-title {
         max-width: 40vh;
         ion-label {
@@ -18,6 +20,7 @@ ion-toolbar {
 }
 
 ion-content {
+    --background: var(--ion-color-dark-shade);
     .bg_circle {
         position: absolute;
         width: 33vh;
@@ -25,7 +28,7 @@ ion-content {
         left: -8rem;
         top: 7vh;
         border-radius: 50%;
-        background: rgba(117, 254, 172, 0.72);
+        background: var(--ion-color-primary);
     }
 
     ion-row {
@@ -35,14 +38,15 @@ ion-content {
             div.card_details {
                 width: 100%;
                 aspect-ratio: 1.586;
-                border-radius: 2.5rem;
+                border-radius: 4vh;
                 padding: 0 1.5rem;
                 background: rgba(255, 255, 255, 0.05);
                 backdrop-filter: blur(30px);
-                border: 2px solid rgba(127, 212, 168, 0.2);
-                img {
-                    align-self: start;
-                    height: 2rem;
+                border: 2px solid rgba(157, 224, 0, 0.2);
+                ion-img {
+                    align-self: end;
+                    height: 1rem;
+                    transform: scale(4);
                     margin: 2rem 0 2rem 0;
                 }
                 ion-label {
@@ -52,6 +56,7 @@ ion-content {
                         font-weight: 700;
                     }
                     span {
+                        color: white;
                         font-size: 1.1rem;
                         font-weight: 500;
                     }
@@ -66,14 +71,31 @@ ion-content {
         }
     }
 
-    ion-list {
-        border-radius: 3vh 3vh 0 0;
-        background: var(--ion-color-secondary);
-        height: 100%;
-        ion-item {
-            ion-label {
-                font-size: 1.1rem !important;
-            }
+    border-radius: 3vh 3vh 0 0;
+    background: var(--ion-color-dark);
+    padding-bottom: 4rem;
+    ion-list-header {
+        padding-inline-start: 0;
+    }
+    ion-list-header, ion-item {
+        ion-label {
+            font-size: 1.1rem;
+            color: white;
         }
+      }
+    ion-list-header {
+      align-items: center;
+      --padding-top: 2rem;
+      ion-text{
+          font-size: 1rem;
+          font-weight: 500;
+          text-align: end;
+          margin-inline-end: 1.5rem;
+      }
+    }
+    ion-item::part(detail-icon) {
+        color: white;
+        opacity: 1;
+        font-size: 20px;
     }
 }

@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'app.velo.com',
-  appName: 'Velo',
+  appId: 'app.finvia.com',
+  appName: 'Finvia',
   webDir: 'www',
   server: {
     androidScheme: 'http', // دعم البروتوكول https://
@@ -24,6 +24,11 @@ const config: CapacitorConfig = {
       splashImmersive: true,
       layoutName: "launch_screen",
       useDialog: true,
+    },
+    StatusBar: {
+      overlaysWebView: false,
+      style: "DARK",
+      backgroundColor: "#131417",
     },
   }
 };

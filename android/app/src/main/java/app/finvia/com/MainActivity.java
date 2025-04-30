@@ -1,4 +1,4 @@
-package app.velo.com;
+package app.finvia.com;
 
 import com.getcapacitor.BridgeActivity;
 
