@@ -16,7 +16,7 @@ async function getOrSetCache(key, cb, expiration = DEFAULT_EXPIRATION) {
   }
 }
 
-async function deleteCache(key) {
+async function clearCache(key) {
   try {
     const redisClient = await getRedisClient();
     await redisClient.del(key);
@@ -26,4 +26,4 @@ async function deleteCache(key) {
   }
 }
 
-export { getOrSetCache, deleteCache };
+export { getOrSetCache, clearCache };

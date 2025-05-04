@@ -24,7 +24,7 @@ const binanceDepositVerificationSchema = new mongoose.Schema({
         screenshotUrl: { type: String } // URL of the uploaded screenshot
     },
     // Status of the API verification process
-    verificationStatus: {
+    status: {
         type: String,
         required: true,
         enum: [
@@ -64,18 +64,18 @@ const binanceDepositVerificationSchema = new mongoose.Schema({
 }, { timestamps: { createdAt: 'createdAt', updatedAt: 'lastCheckedAt' } });
 
 // Indexes
-binanceDepositVerificationSchema.index({ verificationStatus: 1 });
+binanceDepositVerificationSchema.index({ status: 1 });
 binanceDepositVerificationSchema.index({ 'userProvidedInfo.binanceTxId': 1 });
 
 // Pre-save hook to set verifiedAt timestamp
 binanceDepositVerificationSchema.pre('save', function(next) {
-    if (this.isModified('verificationStatus') && this.verificationStatus === 'verified' && !this.verifiedAt) {
+    if (this.isModified('status') && this.status === 'verified' && !this.verifiedAt) {
         this.verifiedAt = new Date();
     }
     // Update the corresponding Transaction status based on verification outcome
     // This logic is better handled in the application layer after successful save
-    // Example: if (this.verificationStatus === 'verified') { Transaction.findByIdAndUpdate(this.depositTransactionId, { status: 'completed' }); }
-    // Example: if (['mismatch', 'not_found', 'api_error'].includes(this.verificationStatus)) { Transaction.findByIdAndUpdate(this.depositTransactionId, { status: 'failed', failureReason: this.failureReason }); }
+    // Example: if (this.status === 'verified') { Transaction.findByIdAndUpdate(this.depositTransactionId, { status: 'completed' }); }
+    // Example: if (['mismatch', 'not_found', 'api_error'].includes(this.status)) { Transaction.findByIdAndUpdate(this.depositTransactionId, { status: 'failed', failureReason: this.failureReason }); }
     next();
 });
 

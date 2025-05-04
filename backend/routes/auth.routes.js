@@ -1,25 +1,83 @@
 import { Router } from 'express';
 import passport from "passport";
+import { body, param } from 'express-validator'; // Import body/param for inline validation if needed
 
-import { signUp, signIn, signOut, googleCallback, verifyEmail, resendVerificationEmail, forgotPassword, resetPassword, bannedUser, unbannedUser } from '../controllers/auth.controller.js';
-import errorMiddleware from '../middlewares/error.middleware.js';
-import { authorizeAdmin } from '../middlewares/auth.middleware.js';
+// Import controllers
+import {
+    signUp,
+    signIn,
+    signOut,
+    googleCallback,
+    verifyEmail,
+    resendVerificationEmail,
+    forgotPassword,
+    resetPassword,
+    checkAuth // Keep checkAuth here for session verification
+} from '../controllers/auth.controller.js';
+
+// Import middleware
+import { authorize } from '../middlewares/auth.middleware.js'; // General authorization
+// import { authorizeAdmin } from '../middlewares/auth.middleware.js'; // Admin authorization (routes moved)
+// import errorMiddleware from '../middlewares/error.middleware.js'; // Apply globally or specifically
+import {
+    registerValidationRules,
+    loginValidationRules,
+    handleValidationErrors
+} from '../validators/auth.validator.js';
 
 const authRouter = Router();
 
-authRouter.post('/signup', errorMiddleware, signUp);
-authRouter.post('/signin', errorMiddleware, signIn);
-authRouter.post('/signout', errorMiddleware, signOut);
-authRouter.get("/google", passport.authenticate("google", { scope: ["profile", "email"] }));
-authRouter.get("/google/callback", passport.authenticate("google", { session: false }), googleCallback ); 
+// --- Public Routes ---
 
-authRouter.post("/verify-email/", verifyEmail);
-authRouter.post("/resend-verification-email", resendVerificationEmail);
+// POST /v1/auth/signup
+authRouter.post('/signup', registerValidationRules(), handleValidationErrors, signUp);
+
+// POST /v1/auth/signin
+authRouter.post('/signin', loginValidationRules(), handleValidationErrors, signIn);
+
+// POST /v1/auth/signout
+authRouter.post('/signout', signOut); // No auth needed, clears cookie
+
+// GET /v1/auth/google (Initiate Google OAuth)
+authRouter.get("/google", passport.authenticate("google", { scope: ["profile", "email"] }));
+
+// GET /v1/auth/google/callback (Google OAuth Callback)
+authRouter.get("/google/callback", passport.authenticate("google", { session: false, failureRedirect: '/login/failed' }), googleCallback );
+
+// POST /v1/auth/verify-email
+// Basic validation for email and token
+authRouter.post("/verify-email", [
+    body('token').notEmpty().withMessage('Verification token is required'),
+    body('email').isEmail().withMessage('Valid email is required').normalizeEmail()
+], handleValidationErrors, verifyEmail);
+
+
+// POST /v1/auth/resend-verification-email
+// Basic validation for email
+authRouter.post("/resend-verification-email", [
+    body('email').isEmail().withMessage('Valid email is required').normalizeEmail()
+], handleValidationErrors, resendVerificationEmail);
+
+// POST /v1/auth/forgot-password
+// Add validation middleware: validateForgotPassword
+// Add rate limiting middleware
 authRouter.post("/forgot-password", forgotPassword);
 
-authRouter.post("/reset-password/:token", resetPassword);
-authRouter.post("/banned/:id", authorizeAdmin, bannedUser);
+// POST /v1/auth/reset-password/:token
+// Basic validation for token and password
+authRouter.post("/reset-password/:token", [
+    param('token').notEmpty().withMessage('Reset token is required'),
+    body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters long')
+], handleValidationErrors, resetPassword);
 
-authRouter.post("/unbanned/:id", authorizeAdmin, unbannedUser)
+// --- Private Routes (Require Authentication) ---
+
+// GET /v1/auth/check-auth (Verify token and return user)
+authRouter.get('/check-auth', authorize, checkAuth);
+
+// --- Admin Routes (Moved to admin.routes.js) ---
+// authRouter.post("/banned/:id", authorize, authorizeAdmin, bannedUser);
+// authRouter.post("/unbanned/:id", authorize, authorizeAdmin, unbannedUser); // Combined into bannedUser toggle
 
 export default authRouter;
+

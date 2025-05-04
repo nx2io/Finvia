@@ -1,26 +1,35 @@
 import { Router } from 'express';
-import authorize from '../middlewares/auth.middleware.js'
+
+// Import controllers
 import {
-  createSubscription,
-  getUserSubscriptions,
-} from '../controllers/subscription.controller.js'
+    listAvailablePlans,
+    getMySubscription,
+    changeSubscription,
+    cancelSubscription
+} from '../controllers/subscription.controller.js';
+
+// Import middleware
+import { authorize } from '../middlewares/auth.middleware.js'; // General authorization
+// import { validateChangeSubscription } from '../middlewares/validation.middleware.js'; // Placeholder for validation
 
 const subscriptionRouter = Router();
 
-subscriptionRouter.get('/', (req, res) => res.send({ title: 'GET all subscriptions' }));
+// --- Public Routes ---
+// GET /v1/subscriptions/plans
+subscriptionRouter.get('/plans', listAvailablePlans);
 
-subscriptionRouter.get('/:id', (req, res) => res.send({ title: 'GET subscription details' }));
+// --- Private Routes (Require Authentication) ---
+subscriptionRouter.use(authorize);
 
-subscriptionRouter.post('/', authorize, createSubscription);
+// GET /v1/subscriptions/my-subscription
+subscriptionRouter.get('/my-subscription', getMySubscription);
 
-subscriptionRouter.put('/:id', (req, res) => res.send({ title: 'UPDATE subscription' }));
+// PUT /v1/subscriptions/change-plan
+// Add validation middleware: validateChangeSubscription
+subscriptionRouter.put('/change-plan', changeSubscription);
 
-subscriptionRouter.delete('/:id', (req, res) => res.send({ title: 'DELETE subscription' }));
-
-subscriptionRouter.get('/user/:id', authorize, getUserSubscriptions);
-
-subscriptionRouter.put('/:id/cancel', (req, res) => res.send({ title: 'CANCEL subscription' }));
-
-subscriptionRouter.get('/upcoming-renewals', (req, res) => res.send({ title: 'GET upcoming renewals' }));
+// PUT /v1/subscriptions/cancel
+subscriptionRouter.put('/cancel', cancelSubscription);
 
 export default subscriptionRouter;
+

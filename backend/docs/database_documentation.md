@@ -161,7 +161,7 @@
     *   `userId`: معرف المستخدم صاحب الإيداع (FK to User).
     *   `depositTransactionId`: معرف معاملة الإيداع الأولية (FK to Transaction, Unique).
     *   `userProvidedInfo`: المعلومات التي قدمها المستخدم (معرف معاملة Binance، المبلغ، إلخ).
-    *   `verificationStatus`: حالة التحقق عبر API (pending, verified, mismatch, not_found, etc.).
+    *   `status`: حالة التحقق عبر API (pending, verified, mismatch, not_found, etc.).
     *   `apiResponseData`: البيانات المستلمة من Binance API.
     *   `failureReason`: سبب فشل التحقق.
 *   **العلاقات:**
