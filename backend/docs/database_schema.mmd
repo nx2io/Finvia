@@ -1,0 +1,188 @@
+erDiagram
+    USER ||--o{ BANK_ACCOUNT : "has"
+    USER ||--|{ KYC : "has"
+    USER ||--|{ TWO_FACTOR_AUTH : "has"
+    USER ||--|{ WALLET : "has main"
+    USER ||--o{ TRANSACTION : "initiates / receives"
+    USER ||--o{ USERSUBSCRIPTION : "has"
+    USER ||--o{ FUNDREQUEST : "requests"
+    USER ||--o{ FUNDREQUEST : "receives request from"
+    USER ||--o{ BINANCEDEPOSITVERIFICATION : "owns deposit"
+
+    WALLET ||--|{ SUBWALLET : "contains"
+    WALLET ||--o{ TRANSACTION : "involved in"
+    WALLET ||--|{ USER : "belongs to"
+
+    TRANSACTION ||--|{ USER : "initiated by"
+    TRANSACTION ||--|{ WALLET : "affects"
+    TRANSACTION ||--o{ TRANSACTION : "related to (e.g., fee)"
+    TRANSACTION ||--o{ BINANCEDEPOSITVERIFICATION : "verified by"
+    TRANSACTION ||--o{ FUNDREQUEST : "fulfills"
+    TRANSACTION ||--o{ USERSUBSCRIPTION : "pays for"
+
+    SUBSCRIPTIONPLAN ||--o{ USERSUBSCRIPTION : "defines"
+
+    USERSUBSCRIPTION ||--|{ USER : "belongs to"
+    USERSUBSCRIPTION ||--|{ SUBSCRIPTIONPLAN : "based on"
+    USERSUBSCRIPTION ||--o{ TRANSACTION : "paid via"
+
+    FUNDREQUEST ||--|{ USER : "requested by"
+    FUNDREQUEST ||--|{ USER : "requested from"
+    FUNDREQUEST ||--o{ TRANSACTION : "fulfilled by"
+
+    BINANCEDEPOSITVERIFICATION ||--|{ USER : "belongs to"
+    BINANCEDEPOSITVERIFICATION ||--|{ TRANSACTION : "verifies"
+
+    USER {
+        ObjectId _id PK
+        String fullName
+        String username UK
+        String email UK
+        Object phone
+        String password
+        String avatarUrl
+        String nationality
+        Date birthDate
+        Object kyc
+        Boolean isKycVerified
+        Object twoFactorAuth
+        String status
+        String emailVerificationToken
+        Date emailVerificationExpires
+        Boolean isEmailVerified
+        String passwordResetToken
+        Date passwordResetExpires
+        ObjectId subscriptionId FK "Ref USERSUBSCRIPTION"
+        Array bankAccounts FK
+        ObjectId mainWalletId FK
+        Object preferences
+        Date lastLoginTimestamp
+        Array ipAddresses
+        Date createdAt
+        Date updatedAt
+    }
+
+    BANK_ACCOUNT {
+        ObjectId _id PK "Embedded in User"
+        String accountHolderName
+        String iban
+        String bankName
+        String bankCountry
+        String swiftCode
+        Boolean isDefault
+        Date addedAt
+    }
+
+    WALLET {
+        ObjectId _id PK
+        ObjectId userId FK "Ref USER"
+        String walletNumber UK
+        String primaryCurrency
+        Number mainBalance
+        Array subWallets FK
+        String status
+        String statusReason
+        Number dailyTransactionLimit
+        Number monthlyTransactionLimit
+        Date createdAt
+        Date lastUpdatedAt
+    }
+
+    SUBWALLET {
+        ObjectId _id PK "Embedded in Wallet"
+        String name
+        Number balance
+        Date createdAt
+    }
+
+    TRANSACTION {
+        ObjectId _id PK
+        ObjectId userId FK "Ref USER"
+        ObjectId walletId FK "Ref WALLET"
+        ObjectId subWalletId FK "Ref SUBWALLET (optional)"
+        String type
+        String status
+        Number amount
+        String currency
+        Number fee
+        Number netAmount
+        String description
+        ObjectId relatedTransactionId FK "Ref TRANSACTION (optional)"
+        String externalReference
+        ObjectId senderUserId FK "Ref USER (P2P)"
+        ObjectId senderWalletId FK "Ref WALLET (P2P)"
+        ObjectId recipientUserId FK "Ref USER (P2P)"
+        ObjectId recipientWalletId FK "Ref WALLET (P2P)"
+        ObjectId fundRequestId FK "Ref FUNDREQUEST (optional)"
+        ObjectId bankAccountId FK "Ref BANK_ACCOUNT (Withdrawal)"
+        String depositMethod
+        Object depositDetails
+        Date initiatedAt
+        Date completedAt
+        String failureReason
+        Date createdAt
+        Date updatedAt
+    }
+
+    SUBSCRIPTIONPLAN {
+        ObjectId _id PK
+        String planId UK
+        String name
+        String description
+        Number price
+        String currency
+        String billingCycle
+        Object transactionLimits
+        Object fees
+        Array features
+        Boolean isPublic
+        Boolean isActive
+        Date createdAt
+        Date lastUpdatedAt
+    }
+
+    USERSUBSCRIPTION {
+        ObjectId _id PK
+        ObjectId userId FK "Ref USER"
+        ObjectId planId FK "Ref SUBSCRIPTIONPLAN"
+        Object planDetails
+        String status
+        Date startDate
+        Date endDate
+        ObjectId paymentTransactionId FK "Ref TRANSACTION (optional)"
+        Boolean autoRenew
+        String cancellationReason
+        Date cancelledAt
+        Date createdAt
+        Date updatedAt
+    }
+
+    FUNDREQUEST {
+        ObjectId _id PK
+        ObjectId requesterUserId FK "Ref USER"
+        ObjectId requesterWalletId FK "Ref WALLET"
+        ObjectId requestedUserId FK "Ref USER"
+        Number amount
+        String currency
+        String status
+        String note
+        ObjectId fulfillmentTransactionId FK "Ref TRANSACTION (optional)"
+        String rejectionReason
+        Date expiresAt
+        Date requestedAt
+        Date lastUpdatedAt
+    }
+
+    BINANCEDEPOSITVERIFICATION {
+        ObjectId _id PK
+        ObjectId userId FK "Ref USER"
+        ObjectId depositTransactionId FK "Ref TRANSACTION"
+        Object userProvidedInfo
+        String verificationStatus
+        Object apiResponseData
+        String failureReason
+        Date createdAt
+        Date lastCheckedAt
+        Date verifiedAt
+    }
+

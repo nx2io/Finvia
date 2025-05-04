@@ -1,0 +1,14 @@
+import { config } from 'dotenv';
+
+config({ path: `.env.${process.env.NODE_ENV || 'development'}.local` });
+
+export const {
+  PORT, NODE_ENV, SERVER_URL, BASE_URL,
+  MONGODB_URI, REDIS_URL, DEFAULT_EXPIRATION,
+  ENG_SECRET,
+  JWT_SECRET, JWT_EXPIRES_IN,
+  ARCJET_ENV, ARCJET_KEY,
+  GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
+  MAILTRAP_TOKEN, MAILTRAP_ENDPOINT,
+  QSTASH_TOKEN, QSTASH_URL,
+} = process.env;
