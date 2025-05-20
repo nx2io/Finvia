@@ -17,8 +17,11 @@ import connectToDatabase from './config/mongodb.js'
 import getRedisClient from './config/redis.js';
 import passport from './config/google.js';
 import errorMiddleware from './middlewares/error.middleware.js'
-// import arcjetMiddleware from './middlewares/arcjet.middleware.js'
+import arcjetMiddleware from './middlewares/arcjet.middleware.js'
 import morganMiddleware from "./logger/morgan.logger.js";
+
+import { startExchangeRateService } from './services/exchange-rate.js';
+import { startNotiva } from './services/notiva.js';
 
 import { JWT_SECRET } from './config/env.js';
 
@@ -27,7 +30,7 @@ const app = express();
 // Apply request-ip middleware early
 app.use(requestIp.mw());
 
-// app.use(arcjetMiddleware);
+app.use(arcjetMiddleware);
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
@@ -48,7 +51,7 @@ app.use(morganMiddleware);
 app.use('/v1/auth', authRouter);
 app.use('/v1/admin', adminRouter);
 app.use('/v1/deposit', depositRouter);
-app.use('/v1/transaction', transactionRouter);
+app.use('/v1/transactions', transactionRouter);
 app.use('/v1/wallet', walletRouter);
 app.use('/v1/users', userRouter);
 app.use('/v1/subscriptions', subscriptionRouter);
@@ -61,6 +64,8 @@ app.listen(PORT, async () => {
   console.log(`Subscription Tracker API is running on http://localhost:${PORT}`);
 
   await connectToDatabase();
+  startExchangeRateService();
+  await startNotiva();
   await getRedisClient();
 });
 

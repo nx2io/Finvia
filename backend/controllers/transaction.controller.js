@@ -49,7 +49,7 @@ const getUserPlanDetails = async (userId, session = null) => {
  * @access Private
  */
 export const getTransactionHistory = async (req, res, next) => {
-    const userId = req.userId;
+    const userId = req.user._id;
     const { limit = 10, page = 1, type, status, startDate, endDate } = req.query;
 
     const query = { userId: userId };
@@ -69,7 +69,7 @@ export const getTransactionHistory = async (req, res, next) => {
 
     try {
         const transactions = await Transaction.find(query, null, options)
-            .select('-__v -updatedAt'); // Exclude fields
+            .select('-__v -updatedAt').populate("walletId"); // Exclude fields
         const totalTransactions = await Transaction.countDocuments(query);
 
         res.status(200).json({
@@ -93,7 +93,7 @@ export const getTransactionHistory = async (req, res, next) => {
  * @access Private
  */
 export const getTransactionDetails = async (req, res, next) => {
-    const userId = req.userId;
+    const userId = req.user._id;
     const transactionId = req.params.transactionId;
 
     try {
@@ -120,7 +120,7 @@ export const getTransactionDetails = async (req, res, next) => {
  */
 export const sendP2PTransfer = async (req, res, next) => {
     // SECURITY: Add input validation middleware
-    const senderUserId = req.userId;
+    const senderUserId = req.user._id;
     const { recipientIdentifier, amount, currency, note } = req.body; // recipientIdentifier can be username or email
 
     if (!recipientIdentifier || !amount || amount <= 0 || !currency) {
@@ -246,7 +246,7 @@ export const sendP2PTransfer = async (req, res, next) => {
  */
 export const requestFunds = async (req, res, next) => {
     // SECURITY: Add input validation middleware
-    const requesterUserId = req.userId;
+    const requesterUserId = req.user._id;
     const { requestedUserIdentifier, amount, currency, note, expiresDays = 7 } = req.body;
 
     if (!requestedUserIdentifier || !amount || amount <= 0 || !currency) {
@@ -348,7 +348,7 @@ export const requestFunds = async (req, res, next) => {
  * @access Private
  */
 export const listReceivedFundRequests = async (req, res, next) => {
-    const userId = req.userId;
+    const userId = req.user._id;
     try {
         const requests = await FundRequest.find({ requestedUserId: userId, status: 'pending' })
             .populate('requesterUserId', 'username fullName avatarUrl')
@@ -367,7 +367,7 @@ export const listReceivedFundRequests = async (req, res, next) => {
  * @access Private
  */
 export const listSentFundRequests = async (req, res, next) => {
-    const userId = req.userId;
+    const userId = req.user._id;
     try {
         const requests = await FundRequest.find({ requesterUserId: userId })
             .populate('requestedUserId', 'username fullName avatarUrl')
@@ -387,7 +387,7 @@ export const listSentFundRequests = async (req, res, next) => {
  */
 export const respondToFundRequest = async (req, res, next) => {
     // SECURITY: Add input validation middleware
-    const userId = req.userId;
+    const userId = req.user._id;
     const requestId = req.params.requestId;
     const { action, reason } = req.body; // action: 'accept' or 'reject'
 
@@ -456,7 +456,7 @@ export const respondToFundRequest = async (req, res, next) => {
  * @access Private
  */
 export const cancelFundRequest = async (req, res, next) => {
-    const userId = req.userId;
+    const userId = req.user._id;
     const requestId = req.params.requestId;
 
     if (!requestId) {
@@ -511,7 +511,7 @@ export const cancelFundRequest = async (req, res, next) => {
  */
 export const fulfillFundRequest = async (req, res, next) => {
     // This is essentially a P2P transfer triggered by fulfilling a request
-    const fulfillerUserId = req.userId; // The user who received the request and is now paying
+    const fulfillerUserId = req.user._id; // The user who received the request and is now paying
     const requestId = req.params.requestId;
 
     if (!requestId) {
@@ -649,7 +649,7 @@ export const fulfillFundRequest = async (req, res, next) => {
 export const initiateWithdrawal = async (req, res, next) => {
     // SECURITY: Add input validation middleware
     // SECURITY: Ensure user has completed KYC if required for withdrawals
-    const userId = req.userId;
+    const userId = req.user._id;
     const { bankAccountId, amount, currency } = req.body;
 
     if (!bankAccountId || !amount || amount <= 0 || !currency) {

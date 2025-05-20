@@ -15,11 +15,11 @@ const transactionSchema = new mongoose.Schema({
         required: true,
         index: true
     },
-    subWalletId: { // Optional: If the transaction involves a specific sub-wallet
-        type: mongoose.Schema.Types.ObjectId,
-        // No ref needed if sub-wallets are embedded in Wallet model
-        index: true
-    },
+    // subWalletId: { // Optional: If the transaction involves a specific sub-wallet
+    //     type: mongoose.Schema.Types.ObjectId,
+    //     // No ref needed if sub-wallets are embedded in Wallet model
+    //     index: true
+    // },
     type: {
         type: String,
         required: true,

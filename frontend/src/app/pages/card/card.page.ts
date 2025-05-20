@@ -2,7 +2,7 @@ import { Component, OnInit, AfterContentChecked, AfterViewInit } from '@angular/
 import { Routes, RouterModule } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { IonContent, IonLabel, IonToolbar, IonList, IonItemGroup, IonItem, IonTitle, IonRow, IonImg, IonText, IonListHeader, IonToggle } from '@ionic/angular/standalone';
+import { IonContent, IonLabel, IonToolbar, IonList, IonItemGroup, IonItem, IonTitle, IonRow, IonImg, IonText, IonListHeader, IonToggle, IonHeader, IonSegmentButton, IonSegment, IonSegmentView, IonSegmentContent } from '@ionic/angular/standalone';
 import SwiperCore, { SwiperOptions, Pagination } from 'swiper';
 import { SwiperModule } from 'swiper/angular'; // Import SwiperModule
 
@@ -15,13 +15,14 @@ SwiperCore.use([Pagination]);
   templateUrl: './card.page.html',
   styleUrls: ['./card.page.scss'],
   standalone: true,
-  imports: [IonToggle, IonListHeader, IonText, IonImg, IonRow, IonContent, IonLabel, IonToolbar, IonList, IonItemGroup, IonItem, IonTitle, CommonModule, FormsModule, SwiperModule]
+  imports: [IonSegment, IonSegmentButton, IonSegmentView, IonSegmentContent, IonHeader, IonToggle, IonListHeader, IonText, IonImg, IonRow, IonContent, IonLabel, IonToolbar, IonList, IonItemGroup, IonItem, IonTitle, CommonModule, FormsModule, SwiperModule]
 })
 
 
 export class CardPage implements OnInit, AfterContentChecked, AfterViewInit {
   bannerConfig: SwiperOptions = {};
   cards: any[] = [];
+  segmentValue = 'cards';
 
   constructor() { }
 

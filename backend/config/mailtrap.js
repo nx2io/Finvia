@@ -1,12 +1,11 @@
 import { MailtrapClient } from "mailtrap";
-import { MAILTRAP_TOKEN, MAILTRAP_ENDPOINT } from "./env.js";
+import { MAILTRAP_TOKEN } from "./env.js";
 
 export const mailtrapClient = new MailtrapClient({
-	endpoint: MAILTRAP_ENDPOINT,
-	token: MAILTRAP_TOKEN,
+	token: 'a9355bc2578cda37327c1fe4aa810501',
 });
 
 export const sender = {
-	email: "reset@anime-ray.com",
-	name: "AnimeRay",
+	email: "hello@demomailtrap.co",
+	name: "Finvia",
 };

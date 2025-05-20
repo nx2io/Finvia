@@ -17,7 +17,7 @@ import { authorize } from '../middlewares/auth.middleware.js'; // General author
 import {
     // walletTransferValidationRules, // Use this for internal transfers
     // walletIdParamValidationRules, // Use this for routes with :subWalletId
-    handleValidationErrors
+    handleValidationErrors,
 } from '../validators/wallet.validator.js';
 
 const walletRouter = Router();
@@ -58,12 +58,13 @@ walletRouter.delete('/subwallets/:subWalletId', [
 // Use walletTransferValidationRules or create specific rules
 // Example placeholder validation (adjust based on actual logic):
 walletRouter.post('/transfer-internal', [
-    body('sourceWalletId').isMongoId().withMessage('Invalid Source Wallet ID format'),
-    body('destinationWalletId').isMongoId().withMessage('Invalid Destination Wallet ID format'),
+    body('from').isString().isLength({max: 15 }).withMessage('Invalid Source Wallet ID format'),
+    body('to').isString().isLength({max: 15 }).withMessage('Invalid Destination Wallet ID format'),
     body('amount').isNumeric().withMessage('Amount must be numeric').toFloat().isFloat({ min: 0.01 }).withMessage('Amount must be at least 0.01'),
+    body('type').notEmpty().isIn(['S2S', 'P2S', 'S2P']).withMessage('Invalid type'), // Match source/destination type?
     body('currency').notEmpty().isIn(['USD', 'SAR', 'EUR']).withMessage('Invalid currency'), // Match source/destination currency?
-    body('description').optional().isLength({ max: 200 }).trim()
-], handleValidationErrors, transferInternal);
+    body('description').optional().isLength({ max: 200 }).trim(),
+  ], transferInternal);
 
 export default walletRouter;
 

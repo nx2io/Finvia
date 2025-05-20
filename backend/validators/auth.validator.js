@@ -15,7 +15,7 @@ export const registerValidationRules = () => {
     body('fullName').notEmpty().withMessage('Full Name is required').isLength({ min: 2, max: 100 }).trim(),
     body('username').notEmpty().withMessage('Username is required').isLength({ min: 3, max: 30 }).trim().toLowerCase()
       .matches(/^[a-zA-Z0-9_]+$/).withMessage('Username can only contain letters, numbers, and underscores'),
-    body('email').notEmpty().withMessage('Email is required').isEmail().withMessage('Please provide a valid email address').normalizeEmail(),
+      body('email').notEmpty().withMessage('Email is required').isEmail().withMessage('Please provide a valid email address').normalizeEmail({ gmail_remove_dots: false }),
     body('password').notEmpty().withMessage('Password is required').isLength({ min: 8 }).withMessage('Password must be at least 8 characters long'),
     // Basic phone validation - adjust as needed for specific country codes/formats
     body('phone.countryCode').notEmpty().withMessage('Country code is required').trim(),

@@ -2,6 +2,7 @@ import User from '../models/user.model.js';
 import Wallet from '../models/wallet.model.js'; // Needed for populating wallet info
 import { getOrSetCache, clearCache } from "../utils/cache.js";
 import validator from 'validator'; // For bank account validation
+import { decrypt } from '../utils/encryption.js';
 
 // --- Profile Management ---
 
@@ -12,15 +13,15 @@ import validator from 'validator'; // For bank account validation
  */
 export const getMyProfile = async (req, res, next) => {
   try {
-    // req.userId is set by the authorize middleware
-    const userId = req.userId;
+    // req.user._id is set by the authorize middleware
+    const userId = req.user._id;
 
     // Use cache for frequently accessed profile data
     const userProfile = await getOrSetCache(`userProfile:${userId}`, async () => {
       // Populate related data: main wallet and current subscription details
       // Select fields to exclude sensitive data like password, tokens etc.
       return await User.findById(userId)
-        .select('-password -emailVerificationToken -emailVerificationExpires -passwordResetToken -passwordResetExpires -__v')
+        .select('-password -emailVerificationToken -emailVerificationExpires -passwordResetToken -passwordResetExpires -__v -ipAddresses')
         .populate('mainWalletId', 'walletNumber primaryCurrency mainBalance status') // Populate basic wallet info
         // Populate subscription details if needed (consider performance)
         // .populate('subscription.planId', 'name price billingCycle');
@@ -45,7 +46,7 @@ export const getMyProfile = async (req, res, next) => {
  */
 export const updateMyProfile = async (req, res, next) => {
   // SECURITY: Add input validation middleware for allowed fields
-  const userId = req.userId;
+  const userId = req.user._id;
   const { fullName, phone, preferences, avatarUrl } = req.body;
 
   // Construct update object with only allowed fields
@@ -61,7 +62,7 @@ export const updateMyProfile = async (req, res, next) => {
 
   try {
     const updatedUser = await User.findByIdAndUpdate(userId, { $set: updateData }, { new: true, runValidators: true })
-      .select('-password -emailVerificationToken -emailVerificationExpires -passwordResetToken -passwordResetExpires -__v');
+      .select('-password -emailVerificationToken -emailVerificationExpires -passwordResetToken -passwordResetExpires -__v -ipAddresses');
 
     if (!updatedUser) {
       return res.status(404).json({ success: false, message: 'User profile not found' });
@@ -90,12 +91,10 @@ export const updateMyProfile = async (req, res, next) => {
  * @access Private
  */
 export const submitKyc = async (req, res, next) => {
-  // SECURITY: Add input validation middleware
-  // SECURITY: Handle file uploads securely (e.g., to S3), store URLs/paths only.
-  const userId = req.userId;
-  const { documentType, documentNumber, frontImageUrl, backImageUrl } = req.body; // Assuming URLs are provided after upload
+  const userId = req.user._id;
+  const { documentType, documentNumber, issueDate, expiryDate, frontImageUrl, backImageUrl } = req.body; // Assuming URLs are provided after upload
 
-  if (!documentType || !documentNumber || !frontImageUrl) {
+  if (!documentType || !documentNumber || !frontImageUrl || !issueDate || !expiryDate) {
     return res.status(400).json({ success: false, message: 'Missing required KYC fields' });
   }
 
@@ -106,8 +105,8 @@ export const submitKyc = async (req, res, next) => {
     }
 
     // Check if KYC already submitted and pending/verified
-    if (user.kyc && (user.kyc.status === 'pending' || user.kyc.status === 'verified')) {
-        return res.status(400).json({ success: false, message: `KYC status is already ${user.kyc.status}` });
+    if (user.kyc && (user.kyc.kycstatus === 'pending' || user.kyc.kycstatus === 'verified')) {
+        return res.status(400).json({ success: false, message: `KYC status is already ${user.kyc.kycstatus}` });
     }
 
     // SECURITY: Encrypt documentNumber at application layer before saving
@@ -116,9 +115,11 @@ export const submitKyc = async (req, res, next) => {
     user.kyc = {
       documentType,
       documentNumber: documentNumber, // Store encrypted version here
+      issueDate: issueDate,
+      expiryDate: expiryDate,
       frontImage: frontImageUrl,
       backImage: backImageUrl, // Optional
-      status: 'pending', // Initial status
+      kycstatus: 'pending', // Initial status
       submittedAt: new Date(),
     };
     user.isKycVerified = false; // Reset verification status on new submission
@@ -144,7 +145,7 @@ export const submitKyc = async (req, res, next) => {
  * @access Private
  */
 export const getKycStatus = async (req, res, next) => {
-  const userId = req.userId;
+  const userId = req.user._id;
   try {
     const user = await User.findById(userId).select('kyc isKycVerified');
     if (!user) {
@@ -172,20 +173,20 @@ export const getKycStatus = async (req, res, next) => {
  */
 export const addBankAccount = async (req, res, next) => {
   // SECURITY: Add input validation middleware (IBAN, SWIFT formats)
-  const userId = req.userId;
-  const { accountHolderName, iban, bankName, bankCountry, swiftCode } = req.body;
+  const userId = req.user._id;
+  const { accountHolderName, iban, accountNumber, bankName, bankCountry, swiftCode, currency } = req.body;
 
-  if (!accountHolderName || !iban || !bankName || !bankCountry) {
+  if (!accountHolderName || !iban || !accountNumber || !bankName || !bankCountry || !currency) {
     return res.status(400).json({ success: false, message: 'Missing required bank account fields' });
   }
 
   // Additional validation
-  if (!validator.isIBAN(iban)) {
-      return res.status(400).json({ success: false, message: 'Invalid IBAN format' });
-  }
-  if (swiftCode && !validator.isBIC(swiftCode)) {
-      return res.status(400).json({ success: false, message: 'Invalid SWIFT/BIC format' });
-  }
+  // if (!validator.isIBAN(iban)) {
+  //     return res.status(400).json({ success: false, message: 'Invalid IBAN format' });
+  // }
+  // if (swiftCode && !validator.isBIC(swiftCode)) {
+  //     return res.status(400).json({ success: false, message: 'Invalid SWIFT/BIC format' });
+  // }
 
   try {
     const user = await User.findById(userId);
@@ -206,8 +207,10 @@ export const addBankAccount = async (req, res, next) => {
     const newAccount = {
       accountHolderName,
       iban: iban, // Store encrypted version
+      accountNumber: accountNumber,
       bankName,
       bankCountry,
+      currency: currency,
       swiftCode: swiftCode, // Store encrypted version if applicable
       isDefault: user.bankAccounts.length === 0, // Make first account default
       addedAt: new Date(),
@@ -239,7 +242,7 @@ export const addBankAccount = async (req, res, next) => {
  * @access Private
  */
 export const listBankAccounts = async (req, res, next) => {
-  const userId = req.userId;
+  const userId = req.user._id;
   try {
     const user = await User.findById(userId).select('bankAccounts');
     if (!user) {
@@ -247,9 +250,8 @@ export const listBankAccounts = async (req, res, next) => {
     }
 
     // SECURITY: Decrypt IBAN/SWIFT if needed for display (consider masking parts of it)
-    // const decryptedAccounts = user.bankAccounts.map(acc => ({ ...acc.toObject(), iban: decrypt(acc.iban) }));
-
-    res.status(200).json({ success: true, data: user.bankAccounts });
+    const decryptedAccounts = user.bankAccounts.map(acc => ({ ...acc.toObject(), iban: decrypt(acc.iban), accountNumber: decrypt(acc.accountNumber), swiftCode: decrypt(acc.swiftCode) }));
+    res.status(200).json({ success: true, data: decryptedAccounts });
   } catch (error) {
     console.error("List Bank Accounts Error:", error);
     next(error);
@@ -262,7 +264,7 @@ export const listBankAccounts = async (req, res, next) => {
  * @access Private
  */
 export const deleteBankAccount = async (req, res, next) => {
-  const userId = req.userId;
+  const userId = req.user._id;
   const accountId = req.params.accountId;
 
   if (!accountId) {
@@ -306,7 +308,7 @@ export const deleteBankAccount = async (req, res, next) => {
  * @access Private
  */
 export const setDefaultBankAccount = async (req, res, next) => {
-    const userId = req.userId;
+    const userId = req.user._id;
     const accountId = req.params.accountId;
 
     if (!accountId) {
@@ -354,7 +356,7 @@ export const setDefaultBankAccount = async (req, res, next) => {
  * @access Private
  */
 export const getTwoFactorStatus = async (req, res, next) => {
-    const userId = req.userId;
+    const userId = req.user._id;
     try {
         const user = await User.findById(userId).select('twoFactorAuth');
         if (!user) {
@@ -416,7 +418,7 @@ export const disableTwoFactor = async (req, res, next) => {
  */
 export const searchUsers = async (req, res, next) => {
     const query = req.query.q;
-    const currentUserId = req.userId;
+    const currentUserId = req.user._id;
 
     if (!query || query.length < 3) {
         return res.status(400).json({ success: false, message: 'Search query must be at least 3 characters long' });

@@ -15,10 +15,11 @@ export const handleValidationErrors = (req, res, next) => {
 // Validation rules for transferring funds between wallets (example)
 export const walletTransferValidationRules = () => {
   return [
-    body('recipientWalletId').isMongoId().withMessage('Invalid Recipient Wallet ID format'),
+    body('from').isString().isLength({max: 15 }).withMessage('Invalid Source Wallet ID format'),
+    body('to').isString().isLength({max: 15 }).withMessage('Invalid Destination Wallet ID format'),
     body('amount').isNumeric().withMessage('Amount must be numeric').toFloat().isFloat({ min: 0.01 }).withMessage('Amount must be at least 0.01'),
-    body('currency').notEmpty().withMessage('Currency is required').isIn(['USD', 'SAR', 'EUR']).withMessage('Invalid currency'), // Adjust allowed currencies
-    body('description').optional().isLength({ max: 200 }).withMessage('Description cannot exceed 200 characters').trim(),
+    body('currency').notEmpty().isIn(['USD', 'SAR', 'EUR']).withMessage('Invalid currency'), // Match source/destination currency?
+    body('description').optional().isLength({ max: 200 }).trim(),
   ];
 };
 
@@ -28,6 +29,4 @@ export const walletIdParamValidationRules = () => {
     param('walletId').isMongoId().withMessage('Invalid Wallet ID format'),
   ];
 };
-
-// Add more validation rules for other wallet actions as needed
 

@@ -1,39 +1,12 @@
 import mongoose from 'mongoose';
 import Wallet from '../models/wallet.model.js';
 import Transaction from '../models/transaction.model.js'; // Needed for recording internal transfers
+
+import { generateWalletNumber } from '../utils/helpres.js';
 import { getOrSetCache, clearCache } from "../utils/cache.js";
 
-// Helper function for atomic balance updates
-const updateBalance = async (walletId, amount, subWalletId = null, session = null) => {
-    const update = {};
-    const filter = { _id: walletId };
 
-    if (subWalletId) {
-        // Update sub-wallet balance
-        filter['subWallets._id'] = subWalletId;
-        // Ensure sufficient funds if decrementing
-        if (amount < 0) {
-            filter['subWallets.$.balance'] = { $gte: Math.abs(amount) };
-        }
-        update['$inc'] = { 'subWallets.$.balance': amount };
-    } else {
-        // Update main balance
-        // Ensure sufficient funds if decrementing
-        if (amount < 0) {
-            filter.mainBalance = { $gte: Math.abs(amount) };
-        }
-        update['$inc'] = { mainBalance: amount };
-    }
 
-    const options = { new: true, session };
-    const updatedWallet = await Wallet.findOneAndUpdate(filter, update, options);
-
-    if (!updatedWallet) {
-        // Throw error if funds were insufficient or wallet/subwallet not found
-        throw new Error('Insufficient funds or wallet/sub-wallet not found.');
-    }
-    return updatedWallet;
-};
 
 /**
  * @description Get wallet details (main balance, sub-wallets) for the authenticated user
@@ -72,8 +45,8 @@ export const getWalletDetails = async (req, res, next) => {
  */
 export const createSubWallet = async (req, res, next) => {
     // SECURITY: Add input validation middleware
-    const userId = req.userId;
-    const { name } = req.body;
+    const userId = req.user._id;
+    const { name, currency } = req.body;
 
     if (!name) {
         return res.status(400).json({ success: false, message: 'Sub-wallet name is required' });
@@ -85,20 +58,22 @@ export const createSubWallet = async (req, res, next) => {
             return res.status(404).json({ success: false, message: 'Main wallet not found' });
         }
 
+        
         // Check if sub-wallet name already exists (optional, based on requirements)
         const existingSubWallet = wallet.subWallets.find(sub => sub.name === name);
         if (existingSubWallet) {
             return res.status(409).json({ success: false, message: `Sub-wallet with name '${name}' already exists` });
         }
-
+        
         // Limit number of sub-wallets? (Check subscription plan?)
-
+        const subWalletNumber = generateWalletNumber();
         const newSubWallet = {
-            name: name,
-            balance: 0, // Starts with zero balance
+            name,
+            subWalletNumber,
+            balance: 0,
+            currency,
             createdAt: new Date()
         };
-
         wallet.subWallets.push(newSubWallet);
         await wallet.save();
 
@@ -122,7 +97,7 @@ export const createSubWallet = async (req, res, next) => {
  */
 export const updateSubWallet = async (req, res, next) => {
     // SECURITY: Add input validation middleware
-    const userId = req.userId;
+    const userId = req.user._id;
     const subWalletId = req.params.subWalletId;
     const { name } = req.body;
 
@@ -172,7 +147,7 @@ export const updateSubWallet = async (req, res, next) => {
  * @access Private
  */
 export const deleteSubWallet = async (req, res, next) => {
-    const userId = req.userId;
+    const userId = req.user._id;
     const subWalletId = req.params.subWalletId;
 
     if (!subWalletId) {
@@ -221,85 +196,105 @@ export const deleteSubWallet = async (req, res, next) => {
  * @access Private
  */
 export const transferInternal = async (req, res, next) => {
-    // SECURITY: Add input validation middleware
-    const userId = req.userId;
-    const { amount, currency, from, to, description } = req.body;
-    // 'from' and 'to' can be 'main' or a subWalletId
+    const userId = req.user._id;
+    const { amount, currency, type, from, to, description } = req.body;
 
-    if (!amount || amount <= 0 || !currency || !from || !to) {
-        return res.status(400).json({ success: false, message: 'Missing required fields: amount, currency, from, to' });
-    }
-    if (from === to) {
-        return res.status(400).json({ success: false, message: 'Source and destination cannot be the same' });
+    if (!amount || amount <= 0 || !currency || !type) {
+        return res.status(400).json({ success: false, message: 'Missing required fields: amount, currency, type' });
     }
 
     const session = await mongoose.startSession();
     session.startTransaction();
 
     try {
-        const wallet = await Wallet.findOne({ userId: userId }).session(session);
-        if (!wallet) {
-            throw new Error('Main wallet not found');
-        }
+        const wallet = await Wallet.findOne({ userId }).session(session);
+        if (!wallet) throw new Error('Main wallet not found');
 
-        // Validate currency
         if (currency !== wallet.primaryCurrency) {
             throw new Error(`Invalid currency. Wallet currency is ${wallet.primaryCurrency}`);
         }
 
-        // Determine source and destination IDs
-        const sourceId = from === 'main' ? null : from;
-        const destId = to === 'main' ? null : to;
+        let sourceSubIndex = -1;
+        let destSubIndex = -1;
 
-        // 1. Decrement source balance
-        await updateBalance(wallet._id, -amount, sourceId, session);
+        // التحقق من المصدر والوجهة حسب النوع
+        if (type === 'P2S') {
+            if (!to) throw new Error('Destination sub-wallet required for P2S');
+            destSubIndex = wallet.subWallets.findIndex(sw => sw.subWalletNumber === to);
+            if (destSubIndex === -1) throw new Error('Destination sub-wallet not found');
 
-        // 2. Increment destination balance
-        await updateBalance(wallet._id, amount, destId, session);
+            if (wallet.mainBalance < amount) throw new Error('Insufficient funds');
+            wallet.mainBalance = (wallet.mainBalance - amount).toFixed(2);
+            wallet.subWallets[destSubIndex].balance = (parseFloat(wallet.subWallets[destSubIndex].balance) + parseFloat(amount)).toFixed(2);
+        }
 
-        // 3. Record the transaction
+        else if (type === 'S2P') {
+            if (!from) throw new Error('Source sub-wallet required for S2P');
+            sourceSubIndex = wallet.subWallets.findIndex(sw => sw.subWalletNumber === from);
+            if (sourceSubIndex === -1) throw new Error('Source sub-wallet not found');
+
+            const sourceSub = wallet.subWallets[sourceSubIndex];
+            if (sourceSub.balance < amount) throw new Error('Insufficient funds');
+            sourceSub.balance = (sourceSub.balance - amount).toFixed(2);
+            wallet.mainBalance = (parseFloat(wallet.mainBalance) + parseFloat(amount)).toFixed(2);
+        }
+
+        else if (type === 'S2S') {
+            if (!from || !to) throw new Error('Both source and destination sub-wallets are required for S2S');
+            if (from === to) throw new Error('Source and destination cannot be the same');
+
+            sourceSubIndex = wallet.subWallets.findIndex(sw => sw.subWalletNumber === from);
+            destSubIndex = wallet.subWallets.findIndex(sw => sw.subWalletNumber === to);
+
+            if (sourceSubIndex === -1 || destSubIndex === -1) throw new Error('Source or destination sub-wallet not found');
+
+            const sourceSub = wallet.subWallets[sourceSubIndex];
+            const destSub = wallet.subWallets[destSubIndex];
+
+            if (sourceSub.balance < amount) throw new Error('Insufficient funds');
+            sourceSub.balance = (sourceSub.balance - amount).toFixed(2);
+            destSub.balance = (parseFloat(destSub.balance) + parseFloat(amount)).toFixed(2);
+        }
+
+        await wallet.save({ session });
+
         const transaction = new Transaction({
-            userId: userId,
+            userId,
             walletId: wallet._id,
-            // subWalletId: sourceId || destId, // Indicate which sub-wallet was involved? Maybe too complex.
             type: 'SUBWALLET_TRANSFER',
             status: 'completed',
-            amount: amount,
-            currency: currency,
-            fee: 0, // Internal transfers are free
+            amount,
+            currency,
+            fee: 0,
             netAmount: amount,
-            description: description || `Transfer from ${from === 'main' ? 'main' : 'sub-wallet '+ from} to ${to === 'main' ? 'main' : 'sub-wallet '+ to}`,
+            description: `Transfer (${type}) From ${from} to ${to}`,
             initiatedAt: new Date(),
             completedAt: new Date(),
         });
         await transaction.save({ session });
 
-        // Commit transaction
         await session.commitTransaction();
         session.endSession();
 
-        // Clear cache
         await clearCache(`walletDetails:${userId}`);
-        // Clear transaction history cache if implemented
 
-        res.status(200).json({ success: true, message: 'Internal transfer successful', data: { transactionId: transaction._id } });
+        res.status(200).json({
+            success: true,
+            message: 'Internal transfer successful',
+            data: { transactionId: transaction._id }
+        });
 
     } catch (error) {
-        // Abort transaction on error
-        if (session.inTransaction()) {
-            await session.abortTransaction();
-        }
+        if (session.inTransaction()) await session.abortTransaction();
         session.endSession();
 
         console.error("Internal Transfer Error:", error);
-        // Provide specific error messages
         if (error.message.includes('Insufficient funds')) {
             return res.status(400).json({ success: false, message: 'Insufficient funds in source wallet.' });
         }
         if (error.message.includes('not found')) {
-             return res.status(404).json({ success: false, message: 'Source or destination wallet not found.' });
+            return res.status(404).json({ success: false, message: error.message });
         }
         next(error);
     }
 };
-

@@ -12,13 +12,39 @@ export const handleValidationErrors = (req, res, next) => {
 // Validation rules for adding a bank account
 export const addBankAccountValidationRules = () => {
   return [
-    body('accountHolderName').notEmpty().withMessage('Account holder name is required').trim(),
-    body('iban').notEmpty().withMessage('IBAN is required').isIBAN().withMessage('Invalid IBAN format'),
-    body('bankName').notEmpty().withMessage('Bank name is required').trim(),
-    body('bankCountry').notEmpty().withMessage('Bank country is required').trim(), // Consider ISO code validation if needed
-    // SWIFT/BIC is often optional but validate if provided
-    body('swiftCode').optional({ checkFalsy: true }).isBIC().withMessage('Invalid SWIFT/BIC code').trim(),
-    body('isDefault').optional().isBoolean().withMessage('isDefault must be a boolean'),
+    body('accountHolderName')
+      .notEmpty().withMessage('Account holder name is required')
+      .trim(),
+
+    body('iban')
+      .notEmpty().withMessage('IBAN is required')
+      .isIBAN().withMessage('Invalid IBAN format'),
+
+    body('accountNumber')
+      .notEmpty().withMessage('Account Number is required')
+      .isNumeric().withMessage('Account Number must be numeric'),
+
+    body('bankName')
+      .notEmpty().withMessage('Bank name is required')
+      .trim(),
+
+    body('bankCountry')
+      .notEmpty().withMessage('Bank country is required')
+      .isISO31661Alpha2().withMessage('Bank country must be a valid ISO 3166-1 alpha-2 code')
+      .trim(),
+
+    body('currency')
+      .notEmpty().withMessage('Currency is required')
+      .isISO4217().withMessage('Invalid currency code'),
+
+    body('swiftCode')
+      .optional({ checkFalsy: true })
+      .isBIC().withMessage('Invalid SWIFT/BIC code')
+      .trim(),
+
+    body('isDefault')
+      .optional()
+      .isBoolean().withMessage('isDefault must be a boolean'),
   ];
 };
 

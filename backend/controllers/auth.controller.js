@@ -1,26 +1,18 @@
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
-import { v4 as uuidv4 } from 'uuid'; // Import UUID for wallet number generation
 
 import User from '../models/user.model.js';
 import Wallet from '../models/wallet.model.js'; // Import Wallet model
 import SubscriptionPlan from '../models/subscription-plan.model.js'; // Import SubscriptionPlan model
 import UserSubscription from '../models/user-subscription.model.js'; // Import UserSubscription model
 
+import { generateWalletNumber } from '../utils/helpres.js'; 
 import { generateTokenAndSetCookie } from "../utils/generateTokenAndSetCookie.js";
 import { sendVerificationEmail, sendWelcomeEmail, sendPasswordResetEmail, sendResetSuccessEmail } from "../utils/emails.js";
-
-// Helper function to generate a unique wallet number (example implementation)
-const generateWalletNumber = () => {
-  const uuid = uuidv4().replace(/-/g, '');
-  return `W${Date.now().toString().slice(-6)}${uuid.slice(0, 6)}`.toUpperCase();
-};
 
 export const signUp = async (req, res, next) => {
   const { fullName, email, password, username, phone, nationality, birthDate } = req.body;
   const clientIp = req.clientIp; // Get IP from request-ip middleware
-
-  // Basic validation (handled by middleware now)
 
   try {
     const existingUser = await User.findOne({ $or: [{ email }, { username }] });

@@ -22,7 +22,17 @@ const kycSchema = new mongoose.Schema({
   backImage: { // Optional, store URL or path
     type: String
   },
-  status: {
+  issueDate: {
+    type: Date,
+    required: true,
+    validate: [validator.isDate, 'Invalid date format']
+  },
+  expiryDate: {
+    type: Date,
+    required: true,
+    validate: [validator.isDate, 'Invalid date format']
+  },
+  kycstatus: {
     type: String,
     enum: ['pending', 'verified', 'rejected', 'resubmit_required'],
     default: 'pending'
@@ -43,6 +53,7 @@ const bankAccountSchema = new mongoose.Schema({
     // Validation should happen *before* encryption in the controller/service layer
     // validate: [validator.isIBAN, 'Invalid IBAN format'] // Remove validation here, apply before encryption
   },
+  accountNumber: { type: String, required: true, trim: true },
   bankName: { type: String, required: true, trim: true },
   bankCountry: { type: String, required: true, trim: true }, // Use ISO country codes?
   swiftCode: { // Encrypted field
@@ -51,6 +62,7 @@ const bankAccountSchema = new mongoose.Schema({
     // Validation should happen *before* encryption
     // validate: [validator.isBIC, 'Invalid SWIFT/BIC code'] // Remove validation here, apply before encryption
   },
+  currency: { type: String, required: true, trim: true },
   isDefault: { type: Boolean, default: false },
   addedAt: { type: Date, default: Date.now }
   // Removed bankAccountNumber as IBAN usually suffices, reduces data duplication/risk
@@ -196,6 +208,10 @@ userSchema.pre('save', function(next) {
         // Check if IBAN exists and is not already encrypted (simple check)
         if (account.iban && !account.iban.includes(':')) {
           account.iban = encrypt(account.iban);
+        }
+        // Check if accountNumber exists and is not already encrypted
+        if (account.accountNumber &&!account.accountNumber.includes(':')) {
+          account.accountNumber = encrypt(account.accountNumber);
         }
         // Check if swiftCode exists and is not already encrypted
         if (account.swiftCode && !account.swiftCode.includes(':')) {

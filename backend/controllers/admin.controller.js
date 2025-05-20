@@ -107,7 +107,7 @@ export const getUserDetails = async (req, res, next) => {
 export const updateUserStatus = async (req, res, next) => {
     const userId = req.params.userId;
     const { status, reason } = req.body; // status: 'active', 'suspended', 'banned', 'closed'
-    const adminUserId = req.userId;
+    const adminUserId = req.user._id;
 
     if (!status || !['active', 'suspended', 'banned', 'closed'].includes(status)) {
         return res.status(400).json({ success: false, message: 'Valid status is required' });
@@ -156,7 +156,7 @@ export const updateUserStatus = async (req, res, next) => {
  */
 export const deleteUser = async (req, res, next) => {
     const userId = req.params.userId;
-    const adminUserId = req.userId;
+    const adminUserId = req.user._id;
 
     // Prevent admin from deleting self
     if (userId === adminUserId) {
@@ -247,7 +247,7 @@ export const listPendingKyc = async (req, res, next) => {
 export const reviewKyc = async (req, res, next) => {
     const userId = req.params.userId;
     const { action, reason } = req.body; // action: 'approve' or 'reject'
-    const adminUserId = req.userId;
+    const adminUserId = req.user._id;
 
     if (!action || !['approve', 'reject'].includes(action)) {
         return res.status(400).json({ success: false, message: 'Valid action (approve/reject) is required' });
@@ -258,11 +258,11 @@ export const reviewKyc = async (req, res, next) => {
 
     try {
         const user = await User.findById(userId);
-        if (!user || !user.kyc || user.kyc.status !== 'pending') {
+        if (!user || !user.kyc || user.kyc.kycstatus !== 'pending') {
             return res.status(404).json({ success: false, message: 'User not found or KYC not pending review' });
         }
 
-        user.kyc.status = action === 'approve' ? 'verified' : 'rejected';
+        user.kyc.kycstatus = action === 'approve' ? 'verified' : 'rejected';
         user.kyc.reviewedAt = new Date();
         user.kyc.reviewedBy = adminUserId;
         if (action === 'reject') {
@@ -278,7 +278,7 @@ export const reviewKyc = async (req, res, next) => {
 
         // Notify user? (Out of scope)
 
-        res.status(200).json({ success: true, message: `KYC submission ${user.kyc.status}`, data: user.kyc });
+        res.status(200).json({ success: true, message: `KYC submission ${user.kyc.kycstatus}`, data: user.kyc });
     } catch (error) {
         console.error("Admin Review KYC Error:", error);
         next(error);
@@ -428,7 +428,7 @@ export const approveDeposit = async (req, res, next) => {
  */
 export const rejectDeposit = async (req, res, next) => {
     const verificationId = req.params.verificationId;
-    const adminUserId = req.userId;
+    const adminUserId = req.user._id;
     const { reason } = req.body;
 
     if (!verificationId) return res.status(400).json({ success: false, message: 'Verification ID is required' });

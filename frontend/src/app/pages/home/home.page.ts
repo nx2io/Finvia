@@ -21,7 +21,7 @@ export class HomePage implements OnInit, AfterContentChecked, AfterViewInit {
   bannerConfig: SwiperOptions = {}; // Initialize bannerConfig
   featureConfig: SwiperOptions = {}; // Initialize featureConfig
   features: any[] = [];
-  transactions: any[] = [];
+  history: any[] = [];
 
   constructor() { }
 
@@ -40,7 +40,7 @@ export class HomePage implements OnInit, AfterContentChecked, AfterViewInit {
       // { id: 4, color: 'light', icon: 'icon-[solar--bill-list-line-duotone]', name: 'Bills' },
       // { id: 5, color: 'warning', icon: 'icon-[solar--card-2-line-duotone]', name: 'Cards' },
     ];
-    this.transactions = [
+    this.history = [
       { id: 1, to: 'Piyush Ag.', date: '2022-05-22', amount: 5000 },
       { id: 2, to: 'Avinash', date: '2022-03-02', amount: 7000 },
       { id: 3, to: 'Catherine', date: '2022-07-28', amount: -3250 },

@@ -8,12 +8,25 @@ const subWalletSchema = new mongoose.Schema({
         trim: true, 
         maxLength: 50 
     },
+    // Wallet number might be better generated and less guessable
+    subWalletNumber: {
+        type: String,
+        required: true,
+        unique: true
+        // Consider a more secure, potentially non-sequential format
+        // Example: Use a UUID or a combination of user ID hash + random string
+        // Removed length and digit match constraints for flexibility
+    },
     balance: {
-        type: Number,
+        type: mongoose.Schema.Types.Decimal128,
         required: true,
         default: 0,
         min: 0
         // Consider using mongoose-decimal128 for precise currency handling
+    },
+    currency: {
+        type: String,
+        enum: ["USD", "SAR", "EUR"]
     },
     // currency field is inherited from the main wallet
     createdAt: { 
@@ -50,7 +63,7 @@ const walletSchema = new mongoose.Schema({
     },
     // Main balance in the primary currency
     mainBalance: {
-        type: Number,
+        type: mongoose.Schema.Types.Decimal128,
         required: true,
         default: 0,
         min: 0

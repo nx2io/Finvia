@@ -1,21 +1,50 @@
-ion-toolbar {
-    --padding-top: 5vh;
-    --padding-bottom: 16px;
-    --padding-start: 16px;
-    --padding-end: 16px;
-    --background: var(--ion-color-dark-shade);
-    ion-title {
-        max-width: 40vh;
-        ion-label {
-            ion-text {
-                font-size: 1rem;
-            }
-            p {
-                ion-text {
-                    font-size: 1.3rem !important;
-                }
-            }
+.md {
+    ion-segment {
+        width: 60%;
+        margin: auto;
+    }
+}
+
+ion-header {
+    ion-toolbar {
+        --padding-top: 1rem;
+        --padding-bottom: 1rem;
+        --background: var(--ion-color-dark-shade);
+        ion-title{
+            font-size: larger;
+            font-weight: 700;
+            padding-bottom: 2rem;
         }
+        ion-segment {
+            margin-top: 3rem;
+            margin-bottom: -1rem;
+            border-radius: 20px;
+            --background: var(--ion-color-dark-tint);
+            ion-segment-button {
+                --color: var(--ion-color-white);
+                --color-checked: var(--ion-color-dark-tint);
+                --indicator-color: var(--ion-color-primary);
+            } 
+              ion-segment-button.ios::part(indicator-background) {
+                border-radius: 20px;
+              }
+        }
+        ion-searchbar.custom {
+            --background: rgba(34, 36, 40, 0.900);
+            --color: #ebebeb;
+            --placeholder-color: #868686;
+            --icon-color: #868686;
+            --clear-button-color: #868686;
+            --border-radius: 3vh;
+          }
+          
+          ion-searchbar.ios.custom {
+            --cancel-button-color: #868686;
+          }
+          
+          ion-searchbar.md.custom {
+            --cancel-button-color: #868686;
+          }
     }
 }
 
@@ -84,14 +113,12 @@ ion-content {
         }
       }
     ion-list-header {
-      align-items: center;
-      --padding-top: 2rem;
-      ion-text{
-          font-size: 1rem;
-          font-weight: 500;
-          text-align: end;
-          margin-inline-end: 1.5rem;
-      }
+        ion-label {
+            padding-top: 1.5rem;
+            padding-inline-start: 1.5rem;
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
     }
     ion-item::part(detail-icon) {
         color: white;

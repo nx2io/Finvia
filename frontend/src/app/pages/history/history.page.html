@@ -1,6 +1,6 @@
 <ion-header class="ion-no-border" translucent>
   <ion-toolbar>
-    <ion-title color="primary" mode="ios">Transactions</ion-title>
+    <ion-title color="primary" mode="ios">History</ion-title>
     <ion-segment mode="ios" [value]="segmentValue">
       <ion-segment-button value="in" content-id="in">
         <ion-label>In-flow</ion-label>
@@ -18,7 +18,7 @@
 <ion-content>
 
   
-  <ion-list class="transactions" *ngIf="transactionsIn.length > 0 && transactionsOut.length > 0">
+  <ion-list class="history" *ngIf="historyIn.length > 0 && historyOut.length > 0">
     <ion-chip color="primary">Primary</ion-chip>
     <ion-datetime-button mode="ios" datetime="datetime"></ion-datetime-button>
     <ion-modal mode="ios" [keepContentsMounted]="true">
@@ -29,7 +29,7 @@
       <ion-segment-view>
         <ion-segment-content id="in">
           <ion-item-group>
-            @for (transaction of transactionsIn; track transaction) {
+            @for (transaction of historyIn; track transaction) {
               <ion-item lines="full">
                 <ion-thumbnail slot="start" class="ion-text-center">
                   <img [src]="'assets/imgs/' + (transaction?.amount >= 0 ? 'up-right.png' : 'down-left-arrow.png')" />
@@ -51,7 +51,7 @@
         </ion-segment-content>
         <ion-segment-content id="out">
           <ion-item-group>
-            <ion-item lines="full" *ngFor="let transaction of transactionsOut">
+            <ion-item lines="full" *ngFor="let transaction of historyOut">
               <ion-thumbnail slot="start" class="ion-text-center">
                 <img [src]="'assets/imgs/' + (transaction?.amount >= 0 ? 'up-right.png' : 'down-left-arrow.png')" />
               </ion-thumbnail>

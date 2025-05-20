@@ -56,7 +56,7 @@ export const listAvailablePlans = async (req, res, next) => {
  * @access Private
  */
 export const getMySubscription = async (req, res, next) => {
-    const userId = req.userId;
+    const userId = req.user._id;
     try {
         // Cache user's subscription details
         const mySubscription = await getOrSetCache(`mySubscription:${userId}`, async () => {
@@ -92,7 +92,7 @@ export const getMySubscription = async (req, res, next) => {
  */
 export const changeSubscription = async (req, res, next) => {
     // SECURITY: Add input validation middleware
-    const userId = req.userId;
+    const userId = req.user._id;
     const { newPlanIdString } = req.body; // e.g., 'PRO', 'BUSINESS'
 
     if (!newPlanIdString) {
@@ -237,7 +237,7 @@ export const changeSubscription = async (req, res, next) => {
  * @access Private
  */
 export const cancelSubscription = async (req, res, next) => {
-    const userId = req.userId;
+    const userId = req.user._id;
 
     const session = await mongoose.startSession();
     session.startTransaction();

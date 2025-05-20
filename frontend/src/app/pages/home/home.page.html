@@ -79,13 +79,13 @@
     </ion-row>
   </div>
 
-    <ion-list class="transactions" *ngIf="transactions.length > 0">
+    <ion-list class="history" *ngIf="history.length > 0">
       <ion-list-header>
-        <ion-title color="light">Recently Transactions</ion-title>
-        <ion-text color="primary" [routerLink]="['/tabs/transactions']"><span>View all</span></ion-text>
+        <ion-title color="light">Recently history</ion-title>
+        <ion-text color="primary" [routerLink]="['/tabs/history']"><span>View all</span></ion-text>
       </ion-list-header>
       <ion-item-group>
-        <ion-item lines="full" *ngFor="let transaction of transactions">
+        <ion-item lines="full" *ngFor="let transaction of history">
           <ion-thumbnail slot="start" class="ion-text-center">
             <img [src]="'assets/imgs/' + (transaction?.amount >= 0 ? 'up-right.png' : 'down-left-arrow.png')" />
           </ion-thumbnail>
