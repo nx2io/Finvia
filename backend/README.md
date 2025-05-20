@@ -1,172 +1,239 @@
-<div align="center">
-  <br />
-    <a href="https://youtu.be/rOpEN1JDaD0?si=WfOjLV57WfR9x6QK" target="_blank">
-      <img src="https://i.ibb.co/xtTbHkfs/Readme-Thumbnail.png" alt="Project Banner">
-    </a>
-  <br />
-  
-  <div>
-    <img src="https://img.shields.io/badge/node.js-339933?style=for-the-badge&logo=Node.js&logoColor=white" alt="node.js" />
-    <img src="https://img.shields.io/badge/express.js-000000?style=for-the-badge&logo=express&logoColor=white" alt="express.js" />
-    <img src="https://img.shields.io/badge/-MongoDB-13aa52?style=for-the-badge&logo=mongodb&logoColor=white" alt="mongodb" />
-  </div>
 
-  <h3 align="center">A Subscription Management System API</h3>
+# 📱 Digital Wallet API
 
-   <div align="center">
-     Build this project step by step with our detailed tutorial on <a href="https://www.youtube.com/@javascriptmastery/videos" target="_blank"><b>JavaScript Mastery</b></a> YouTube. Join the JSM family!
-    </div>
-</div>
+## 📘 Introduction
 
-## 📋 <a name="table">Table of Contents</a>
+This document provides a detailed explanation of the **controllers** and **routes** used in the **Digital Wallet** application. The system is built with scalability, security, and maintainability in mind, following a modified **Model-View-Controller (MVC)** pattern tailored for RESTful APIs.
 
-1. 🤖 [Introduction](#introduction)
-2. ⚙️ [Tech Stack](#tech-stack)
-3. 🔋 [Features](#features)
-4. 🤸 [Quick Start](#quick-start)
-5. 🕸️ [Snippets (Code to Copy)](#snippets)
-6. 🔗 [Assets](#links)
-7. 🚀 [More](#more)
+- **Models** (`/models`): Define data structures and interact with MongoDB.
+- **Controllers** (`/controllers`): Handle business logic and process incoming requests.
+- **Routes** (`/routes`): Map API endpoints to their corresponding controllers and attach relevant middleware.
+- **Middlewares** (`/middlewares`): Provide functionality such as authentication, authorization, validation, and error handling.
 
-## 🚨 Tutorial
+---
 
-This repository contains the code corresponding to an in-depth tutorial available on our YouTube channel, <a href="https://www.youtube.com/@javascriptmastery/videos" target="_blank"><b>JavaScript Mastery</b></a>.
+## 📂 Controllers
 
-If you prefer visual learning, this is the perfect resource for you. Follow our tutorial to learn how to build projects like these step-by-step in a beginner-friendly manner!
+### 1. `auth.controller.js` – Authentication & Registration
 
-<a href="https://youtu.be/rOpEN1JDaD0?si=WfOjLV57WfR9x6QK" target="_blank"><img src="https://github.com/sujatagunale/EasyRead/assets/151519281/1736fca5-a031-4854-8c09-bc110e3bc16d" /></a>
+Handles user authentication and session management.
 
-## <a name="introduction">🤖 Introduction</a>
+#### Main Functions:
+- `signUp`: Registers a new user, creates a primary wallet, and assigns a free subscription plan.
+- `signIn`: Authenticates a user.
+- `signOut`: Logs out the user.
+- `googleCallback`: Google OAuth login/register handler.
+- `verifyEmail`: Verifies email with a provided activation code.
+- `resendVerificationEmail`: Resends email verification code.
+- `forgotPassword`: Initiates password reset.
+- `resetPassword`: Completes password reset.
+- `checkAuth`: Validates the auth token and returns user data.
 
-Build a **production-ready Subscription Management System API** that handles **real users, real money, and real business logic**.  
+#### Notes:
+- Passwords are hashed using `bcryptjs`.
+- JWT tokens are managed via `generateTokenAndSetCookie`.
+- Wallet and free subscription are created automatically during signup or Google OAuth.
+- Recommended: use middleware for input validation and rate-limiting.
 
-Authenticate users using JWTs, connect a database, create models and schemas, and integrate it with ORMs. Structure the architecture of your API to ensure scalability and seamless communication with the frontend.  
+---
 
-If you're getting started and need assistance or face any bugs, join our active Discord community with over **50k+** members. It's a place where people help each other out.
+### 2. `user.controller.js` – User Profile, KYC, Bank Accounts, 2FA
 
-<a href="https://discord.com/invite/n6EdbFJ" target="_blank"><img src="https://github.com/sujatagunale/EasyRead/assets/151519281/618f4872-1e10-42da-8213-1d69e486d02e" /></a>
+Handles user profile updates, identity verification, bank accounts, two-factor auth, and user search.
 
-## <a name="tech-stack">⚙️ Tech Stack</a>
+#### Main Functions:
+- `getMyProfile`, `updateMyProfile`
+- `submitKyc`, `getKycStatus`
+- `addBankAccount`, `listBankAccounts`, `deleteBankAccount`, `setDefaultBankAccount`
+- `getTwoFactorStatus`, `initiateEnableTwoFactor`, `verifyEnableTwoFactor`, `disableTwoFactor`
+- `searchUsers`
 
-- Node.js
-- Express.js
-- MongoDB
+#### Notes:
+- All functions require user authentication via the `authorize` middleware.
+- Sensitive data (e.g., ID numbers, IBAN) should be encrypted.
+- Validation middleware recommended.
 
-## <a name="features">🔋 Features</a>
+---
 
-👉 **Advanced Rate Limiting and Bot Protection**: with Arcjet that helps you secure the whole app.
+### 3. `wallet.controller.js` – Wallet Management
 
-👉 **Database Modeling**: Models and relationships using MongoDB & Mongoose.
+Manages the user’s primary and sub-wallets.
 
-👉 **JWT Authentication**: User CRUD operations and subscription management.
+#### Main Functions:
+- `getWalletDetails`
+- `createSubWallet`, `updateSubWallet`, `deleteSubWallet`
+- `transferInternal`: Transfers between main and sub-wallets.
 
-👉 **Global Error Handling**: Input validation and middleware integration.
+#### Notes:
+- Atomic balance updates are performed using `updateBalance()` with `$inc` and `findOneAndUpdate`.
+- MongoDB sessions ensure transaction integrity for multi-step operations.
+- Internal transfers are logged in the `Transaction` model.
 
-👉 **Logging Mechanisms**: For better debugging and monitoring.
+---
 
-👉 **Email Reminders**: Automating smart email reminders with workflows using Upstash.
+### 4. `transaction.controller.js` – Financial Transactions
 
-and many more, including code architecture and reusability
+Handles peer-to-peer transfers, fund requests, and withdrawals.
 
-## <a name="quick-start">🤸 Quick Start</a>
+#### Main Functions:
+- `getTransactionHistory`, `getTransactionDetails`
+- `sendP2PTransfer`
+- `requestFunds`, `listReceivedFundRequests`, `listSentFundRequests`, `respondToFundRequest`, `cancelFundRequest`, `fulfillFundRequest`
+- `initiateWithdrawal`
 
-Follow these steps to set up the project locally on your machine.
+#### Notes:
+- MongoDB sessions used for complex operations.
+- User limits and fees are validated via `getUserPlanDetails`.
+- Transactions are logged separately for sender and receiver.
+- Withdrawal requests are marked as pending for later external processing.
 
-**Prerequisites**
+---
 
-Make sure you have the following installed on your machine:
+### 5. `subscription.controller.js` – Subscriptions
 
-- [Git](https://git-scm.com/)
-- [Node.js](https://nodejs.org/en)
-- [npm](https://www.npmjs.com/) (Node Package Manager)
+Manages subscription plans and user subscriptions.
 
-**Cloning the Repository**
+#### Main Functions:
+- `listAvailablePlans`
+- `getMySubscription`
+- `changeSubscription`: Upgrades/downgrades plans.
+- `cancelSubscription`: Disables auto-renew.
 
-```bash
-git clone https://github.com/adrianhajdin/subscription-tracker-api.git
-cd subscription-tracker-api
-```
+#### Notes:
+- Uses `SubscriptionPlan` and `UserSubscription` models.
+- MongoDB sessions ensure atomic updates when changing plans.
+- Canceling means auto-renew is off; plan remains active until the billing cycle ends.
 
-**Installation**
+---
 
-Install the project dependencies using npm:
+### 6. `deposit.controller.js` – USDT Deposits via Binance
 
-```bash
-npm install
-```
+Handles deposits using USDT with automatic verification through Binance APIs.
 
-**Set Up Environment Variables**
+#### Main Functions:
+- `getDepositInstructions`: Returns deposit address, network, and memo.
+- `submitDepositVerification`: User submits transaction details and screenshot.
+- `getDepositVerificationStatus`
 
-Create a new file named `.env.local` in the root of your project and add the following content:
+#### Notes:
+- Admin intervention is only needed on failed verifications.
+- `BinanceDepositVerification` model is used to track submissions.
+- Successful deposits update wallet balance and create a transaction.
+- Environment variable required: `BINANCE_USDT_DEPOSIT_ADDRESS`.
+
+---
+
+### 7. `admin.controller.js` – Admin Operations
+
+Provides admin-level functionality for managing the platform.
+
+#### Main Functions:
+- **User Management**: `listUsers`, `getUserDetails`, `updateUserStatus`, `deleteUser`
+- **KYC Review**: `listPendingKyc`, `reviewKyc`
+- **Deposit Review**: `listPendingDeposits`, `approveDeposit`, `rejectDeposit`
+- **Subscription Plans**: `listAllSubscriptionPlans`, `createSubscriptionPlan`, `updateSubscriptionPlan`
+
+#### Notes:
+- All endpoints require admin privileges via `authorizeAdmin`.
+- Uses MongoDB sessions for multi-step operations (e.g., deposit approval, user deletion).
+- Approving deposits also updates user wallet balances atomically.
+
+---
+
+## 🌐 Routes
+
+Routes are defined in `/routes`, each file corresponding to a controller.
+
+| File                 | Base Path             | Description                                              |
+|----------------------|------------------------|----------------------------------------------------------|
+| `auth.routes.js`     | `/api/v1/auth/`        | Authentication and registration                          |
+| `user.routes.js`     | `/api/v1/users/`       | Profile, KYC, banks, 2FA, user search                    |
+| `wallet.routes.js`   | `/api/v1/wallet/`      | Wallet and sub-wallet operations                         |
+| `transaction.routes.js` | `/api/v1/transactions/` | Transaction history, P2P, fund requests, withdrawals  |
+| `subscription.routes.js` | `/api/v1/subscriptions/` | Subscription plan management                          |
+| `deposit.routes.js`  | `/api/v1/deposit/`      | USDT deposit operations via Binance                      |
+| `admin.routes.js`    | `/api/v1/admin/`        | Admin-only management routes                             |
+
+---
+
+## 🔐 Middlewares
+
+| Middleware              | File                                | Purpose                                                                 |
+|-------------------------|-------------------------------------|-------------------------------------------------------------------------|
+| `authorize`             | `/middlewares/auth.middleware.js`   | Validates JWT and attaches `userId` to `req`                            |
+| `authorizeAdmin`        | `/middlewares/auth.middleware.js`   | Ensures the user is an admin                                            |
+| `passport`              | `passport.js`                       | Used for Google OAuth authentication                                   |
+
+### Suggested Additional Middleware:
+- **Input Validation**: Use `express-validator` for validating `req.body`, `req.params`, `req.query`
+- **Rate Limiting**: Use `express-rate-limit` to protect from abuse and brute-force attacks
+
+---
+
+## 🧩 Environment Variables (Suggested)
 
 ```env
 # PORT
-PORT=5500
-SERVER_URL="http://localhost:5500"
+PORT=...
+SERVER_URL=...
+BASE_URL=...
 
 # ENVIRONMENT
-NODE_ENV=development
+NODE_ENV=...
 
 # DATABASE
-DB_URI=
+MONGODB_URI=...
+CLICKHOUSE_URL=...
+# REDIS_URL=...
+REDIS_URL=...
+DEFAULT_EXPIRATION=...
 
-# JWT AUTH
-JWT_SECRET=
-JWT_EXPIRES_IN="1d"
+# Encryption Keys
+JWT_SECRET=...
+ENCRYPTION_KEY=...
+JWT_EXPIRES_IN=...
+EMAIL_PASSWORD=...
+
+#Open Exchange Rates
+OPR_APP_KEY=...
+
+#Binance 
+BINANCE_USDT_DEPOSIT_ADDRESS=...
+BINANCE_USDT_DEPOSIT_MEMO=...
+BINANCE_USDT_DEPOSIT_NETWORK=...
 
 # ARCJET
-ARCJET_KEY=
-ARCJET_ENV="development"
+ARCJET_KEY=...
+ARCJET_ENV=...
 
 # UPSTASH
-QSTASH_URL=http://127.0.0.1:8080
-QSTASH_TOKEN=
+QSTASH_URL=...
+QSTASH_TOKEN=...
 
-# NODEMAILER
-EMAIL_PASSWORD=
+# Mailtrap
+MAILTRAP_TOKEN=...
+MAILTRAP_ENDPOINT=...
+
+#Telegram
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_USERNAME=...
+TELEGRAM_CHAT_ID=...
+# Google
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+
 ```
 
-**Running the Project**
+---
 
-```bash
-npm run dev
-```
+## ✅ Final Notes
 
-Open [http://localhost:5500](http://localhost:5500) in your browser or any HTTP client to test the project.
+* Ensure **MongoDB sessions** are used for all critical multi-step operations.
+* Encrypt and protect all **sensitive user data**.
+* Implement **logging** and **monitoring** for transaction and deposit activities.
+* Consider adding **unit and integration tests** for all controllers.
 
-## <a name="snippets">🕸️ Snippets</a>
+---
 
-<details>
-<summary><code>Dummy JSON Data</code></summary>
+> Built with ❤️ for secure and scalable digital finance.
 
-```json
-{
-  "name": "Javascript Mastery Elite Membership",
-  "price": 139.00,
-  "currency": "USD",
-  "frequency": "monthly",
-  "category": "Entertainment",
-  "startDate": "2025-01-20T00:00:00.000Z",
-  "paymentMethod": "Credit Card"
-}
-```
-
-</details>
-
-## <a name="links">🔗 Links</a>
-
-- **Arcjet** - [https://launch.arcjet.com/4g2R2e4](https://launch.arcjet.com/4g2R2e4)  
-- **Upstash** - [https://bit.ly/42ealiN](https://bit.ly/42ealiN)  
-- **Hostinger** - [https://hostinger.com/mastery10](https://hostinger.com/mastery10)  
-- **WebStorm** - [https://jb.gg/GetWebStormFree](https://jb.gg/GetWebStormFree)  
-
-## <a name="more">🚀 More</a>
-
-**Advance your skills with Next.js Pro Course**
-
-Enjoyed creating this project? Dive deeper into our PRO courses for a richer learning adventure. They're packed with
-detailed explanations, cool features, and exercises to boost your skills. Give it a go!
-
-<a href="https://jsmastery.pro/next15" target="_blank">
-   <img src="https://github.com/user-attachments/assets/b8760e69-1f81-4a71-9108-ceeb1de36741" alt="Project Banner">
-</a>
