@@ -1,3 +1,5 @@
+import mongoose from 'mongoose';
+
 import User from '../models/user.model.js';
 import Wallet from '../models/wallet.model.js';
 import Transaction from '../models/transaction.model.js';
@@ -5,31 +7,11 @@ import FundRequest from '../models/fund-request.model.js';
 import SubscriptionPlan from '../models/subscription-plan.model.js';
 import UserSubscription from '../models/user-subscription.model.js';
 import BinanceDepositVerification from '../models/binance-deposit-verification.model.js';
+
+import { workflowClient } from '../config/upstash.js'
+import { convertCurrency, updateBalance } from '../utils/helpres.js';
 import { getOrSetCache, clearCache } from "../utils/cache.js";
-import mongoose from 'mongoose';
 
-// Helper function for atomic balance updates (Consider moving to a shared utility)
-const updateBalance = async (walletId, amount, subWalletId = null, session = null) => {
-    const update = {};
-    const filter = { _id: walletId };
-
-    if (subWalletId) {
-        filter['subWallets._id'] = subWalletId;
-        if (amount < 0) filter['subWallets.$.balance'] = { $gte: Math.abs(amount) };
-        update['$inc'] = { 'subWallets.$.balance': amount };
-    } else {
-        if (amount < 0) filter.mainBalance = { $gte: Math.abs(amount) };
-        update['$inc'] = { mainBalance: amount };
-    }
-
-    const options = { new: true, session };
-    const updatedWallet = await Wallet.findOneAndUpdate(filter, update, options);
-
-    if (!updatedWallet) {
-        throw new Error('Insufficient funds or wallet/sub-wallet not found.');
-    }
-    return updatedWallet;
-};
 
 // --- User Management ---
 
@@ -213,15 +195,16 @@ export const deleteUser = async (req, res, next) => {
  */
 export const listPendingKyc = async (req, res, next) => {
     const { limit = 10, page = 1 } = req.query;
-    const query = { 'kyc.status': 'pending' };
-    const options = {
-        limit: parseInt(limit),
-        skip: (parseInt(page) - 1) * parseInt(limit),
-        sort: { 'kyc.submittedAt': 1 } // Oldest first
-    };
+    const query = { 'kyc.kycstatus': 'pending' };
+    
 
     try {
-        const users = await User.find(query, 'username fullName email kyc', options);
+        const users = await User.find(query)
+        .select('username fullName email kyc')
+        .limit(parseInt(limit))
+        .skip((parseInt(page) - 1) * parseInt(limit))
+        .sort({ 'kyc.submittedAt': 1 });
+
         const totalPending = await User.countDocuments(query);
 
         res.status(200).json({
@@ -296,16 +279,14 @@ export const listPendingDeposits = async (req, res, next) => {
     const { limit = 10, page = 1 } = req.query;
     // Corrected query to use 'status' instead of 'status'
     const query = { status: 'pending' };
-    const options = {
-        limit: parseInt(limit),
-        skip: (parseInt(page) - 1) * parseInt(limit),
-        sort: { createdAt: 1 } // Sort by creation time (oldest first)
-    };
 
     try {
-        const verifications = await BinanceDepositVerification.find(query, null, options)
-            .populate('userId', 'username email') // Populate user info
-            .populate('depositTransactionId', 'status amount currency'); // Populate related transaction info
+        const verifications = await BinanceDepositVerification.find(query, null)
+        .limit(parseInt(limit),)
+        .skip((parseInt(page) - 1) * parseInt(limit),)
+        .sort({ createdAt: 1 }) // Sort by creation time (oldest first)
+        .populate('userId', 'username email') // Populate user info
+        .populate('depositTransactionId', 'status amount currency'); // Populate related transaction info
 
         const totalPending = await BinanceDepositVerification.countDocuments(query);
 
@@ -342,7 +323,7 @@ export const approveDeposit = async (req, res, next) => {
 
     try {
         // 1. Find the verification record
-        const verification = await BinanceDepositVerification.findById(verificationId).session(session);
+        const verification = await BinanceDepositVerification.findById(verificationId).populate("userId", 'mainWalletId').session(session);
 
         // 2. Check if verification record exists
         if (!verification) {
@@ -374,12 +355,15 @@ export const approveDeposit = async (req, res, next) => {
         }
         const wallet = user.mainWalletId;
 
-        // 7. Validate currency and get amount from transaction
-        if (wallet.primaryCurrency !== 'USD' || depositTx.currency !== 'USDT') {
-            console.warn(`Currency mismatch during approval for verification ${verificationId}: Wallet is ${wallet.primaryCurrency}, Deposit Tx is ${depositTx.currency}. Assuming 1:1 conversion.`);
-            // Consider throwing an error or requiring explicit confirmation depending on business logic
+        // 7. Validate currency and convert if needed
+        let creditAmount;
+        if (wallet.primaryCurrency !== 'USD') {
+            creditAmount = await convertCurrency(depositTx.amount, 'USD', wallet.primaryCurrency);
+            console.info(`Converted ${depositTx.amount} USD to ${creditAmount} ${wallet.primaryCurrency} for wallet ${wallet._id}`);
+        } else {
+            creditAmount = parseFloat(depositTx.amount);
         }
-        const creditAmount = depositTx.amount; // Use amount from the transaction record
+
 
         // 8. Credit the user's main wallet balance
         await updateBalance(wallet._id, creditAmount, null, session);
@@ -444,16 +428,17 @@ export const rejectDeposit = async (req, res, next) => {
         }
 
         verification.status = 'rejected';
-        verification.rejectionReason = reason;
+        verification.apiResponseData = reason;
         verification.processedAt = new Date();
         verification.processedBy = adminUserId;
         await verification.save({ session });
 
-        const updatedTx = await Transaction.findOneAndUpdate(
-            { relatedVerificationId: verification._id, status: 'pending' },
-            { $set: { status: 'rejected', completedAt: new Date() } },
+        const updatedTx = await Transaction.findByIdAndUpdate(
+            verification.depositTransactionId,
+            { $set: { status: 'rejected', failureReason: reason, completedAt: new Date() } },
             { new: true, session: session }
         );
+
         if (!updatedTx) console.warn(`Placeholder transaction not found for verification ${verificationId}`);
 
         await session.commitTransaction();
@@ -495,7 +480,6 @@ export const listAllSubscriptionPlans = async (req, res, next) => {
  * @access Admin
  */
 export const createSubscriptionPlan = async (req, res, next) => {
-    // Add validation for all fields
     try {
         const existingPlan = await SubscriptionPlan.findOne({ planId: req.body.planId });
         if (existingPlan) {
@@ -520,14 +504,13 @@ export const createSubscriptionPlan = async (req, res, next) => {
  * @access Admin
  */
 export const updateSubscriptionPlan = async (req, res, next) => {
-    const planObjectId = req.params.planObjectId;
-    // Add validation
+    const planId = req.params.planObjectId?.toUpperCase();
     try {
-        const updatedPlan = await SubscriptionPlan.findByIdAndUpdate(planObjectId, req.body, { new: true, runValidators: true });
+        const updatedPlan = await SubscriptionPlan.findOneAndUpdate({ planId }, req.body, { new: true, runValidators: true });
         if (!updatedPlan) {
             return res.status(404).json({ success: false, message: 'Subscription plan not found' });
         }
-        await clearCache('subscriptionPlans'); // Clear public cache
+        await clearCache('subscriptionPlans');
         res.status(200).json({ success: true, message: 'Subscription plan updated successfully', data: updatedPlan });
     } catch (error) {
         console.error("Admin Update Plan Error:", error);
@@ -537,6 +520,7 @@ export const updateSubscriptionPlan = async (req, res, next) => {
         next(error);
     }
 };
+
 
 // --- Admin Specific Actions (Should be in Admin Controller with Admin Auth Middleware) ---
 

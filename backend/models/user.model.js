@@ -133,11 +133,9 @@ const userSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: ['pending_verification', 'active', 'suspended', 'banned', 'closed'],
-    default: 'pending_verification',
-    index: true
+    default: 'pending_verification'
   },
-  suspensionReason: { type: String, trim: true },
-  banReason: { type: String, trim: true },
+  statusReason: { type: String, trim: true },
 
   emailVerificationToken: { type: String, select: false },
   emailVerificationExpires: { type: Date, select: false },
@@ -149,8 +147,7 @@ const userSchema = new mongoose.Schema({
   // Link to the user's current subscription plan
   subscription: {
     planId: { type: mongoose.Schema.Types.ObjectId, ref: 'SubscriptionPlan' },
-    status: { type: String, enum: ['active', 'expired', 'cancelled'], default: 'active' }, // Reflects UserSubscription status
-    expiresAt: { type: Date }
+    substatus: { type: String, enum: ['active', 'expired', 'cancelled'], default: 'active' },
   },
 
   // Embedded bank accounts
@@ -174,8 +171,6 @@ const userSchema = new mongoose.Schema({
 }, { timestamps: true }); // Adds createdAt and updatedAt
 
 // Indexes
-userSchema.index({ email: 1 });
-userSchema.index({ username: 1 });
 userSchema.index({ 'phone.countryCode': 1, 'phone.number': 1 });
 userSchema.index({ status: 1 });
 userSchema.index({ role: 1 }); // Add index for role field

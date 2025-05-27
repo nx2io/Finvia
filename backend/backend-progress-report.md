@@ -82,7 +82,7 @@ This document summarizes the current backend progress for the platform, includin
 ---
 
 ### 🔁 Wallet Currency Conversion
-- [ ] Auto-convert amount from source wallet's currency to destination wallet's currency
+- [x] Auto-convert amount from source wallet's currency to destination wallet's currency
 
 ---
 

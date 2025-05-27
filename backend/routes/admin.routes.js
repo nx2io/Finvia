@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { body, param, query } from 'express-validator';
 
 // Import controllers
 import {
@@ -28,25 +29,46 @@ adminRouter.use(authorizeAdmin);
 
 // --- User Management ---
 // GET /v1/admin/users?limit=10&page=1&status=active&search=john
-adminRouter.get('/users', listUsers);
+adminRouter.get('/users', [
+    query("limit").isNumeric(),
+    query("page").isNumeric(),
+    query("status").isString().isIn([ 'active', 'suspended', 'banned', 'closed']).withMessage('invalid status'),
+    query("search").isString().withMessage('invalid search')
+
+], listUsers);
 
 // GET /v1/admin/users/:userId
-adminRouter.get('/users/:userId', getUserDetails);
+adminRouter.get('/users/:userId', [
+    param("userId").isMongoId().withMessage('invalid user')
+], getUserDetails);
 
 // PUT /v1/admin/users/:userId/status
 // Add validation middleware: validateUpdateUserStatus
-adminRouter.put('/users/:userId/status', updateUserStatus);
+adminRouter.put('/users/:userId/status', [
+    param("userId").isMongoId().withMessage("invalid user"),
+    body("status").notEmpty().isString().isIn([ 'active', 'suspended', 'banned', 'closed']).withMessage('invalid status'),
+    body("reason").notEmpty().isString().withMessage('invalid reason')
+], updateUserStatus);
 
 // DELETE /v1/admin/users/:userId
-adminRouter.delete('/users/:userId', deleteUser);
+adminRouter.delete('/users/:userId', [
+    param("userId").isMongoId().withMessage('invalid user')
+], deleteUser);
 
 // --- KYC Management ---
 // GET /v1/admin/kyc/pending?limit=10&page=1
-adminRouter.get('/kyc/pending', listPendingKyc);
+adminRouter.get('/kyc/pending', [
+    query("limit").isNumeric(),
+    query("page").isNumeric()
+], listPendingKyc);
 
 // PUT /v1/admin/kyc/:userId/review
 // Add validation middleware: validateReviewKyc
-adminRouter.put('/kyc/:userId/review', reviewKyc);
+adminRouter.put('/kyc/:userId/review', [
+    param("userId").notEmpty().isMongoId().withMessage('invalid user'),
+    body("action").notEmpty().isString().isIn(['approve', 'reject']).withMessage('invalid action'),
+    body("reason").notEmpty().isString().withMessage('invalid reason')
+], reviewKyc);
 
 // --- Deposit Management ---
 // GET /v1/admin/deposits/pending?limit=10&page=1

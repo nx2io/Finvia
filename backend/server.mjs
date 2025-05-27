@@ -10,6 +10,7 @@ import adminRouter from './routes/admin.routes.js';
 import depositRouter from './routes/deposit.routes.js';
 import transactionRouter from './routes/transaction.routes.js';
 import walletRouter from './routes/wallet.routes.js';
+import exchangeRouter from './routes/exchange.routes.js';
 import userRouter from './routes/user.routes.js';
 import subscriptionRouter from './routes/subscription.routes.js';
 import workflowRouter from './routes/workflow.routes.js'
@@ -17,11 +18,11 @@ import connectToDatabase from './config/mongodb.js'
 import getRedisClient from './config/redis.js';
 import passport from './config/google.js';
 import errorMiddleware from './middlewares/error.middleware.js'
-import arcjetMiddleware from './middlewares/arcjet.middleware.js'
+// import arcjetMiddleware from './middlewares/arcjet.middleware.js'
 import morganMiddleware from "./logger/morgan.logger.js";
 
-import { startExchangeRateService } from './services/exchange-rate.js';
-import { startNotiva } from './services/notiva.js';
+// import { startExchangeRateService } from './services/exchange-rate.js';
+// import { startNotiva } from './services/notiva.js';
 
 import { JWT_SECRET } from './config/env.js';
 
@@ -30,7 +31,7 @@ const app = express();
 // Apply request-ip middleware early
 app.use(requestIp.mw());
 
-app.use(arcjetMiddleware);
+// app.use(arcjetMiddleware);
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
@@ -53,6 +54,7 @@ app.use('/v1/admin', adminRouter);
 app.use('/v1/deposit', depositRouter);
 app.use('/v1/transactions', transactionRouter);
 app.use('/v1/wallet', walletRouter);
+app.use('/v1/exchange', exchangeRouter);
 app.use('/v1/users', userRouter);
 app.use('/v1/subscriptions', subscriptionRouter);
 app.use('/v1/workflows', workflowRouter);
@@ -61,12 +63,10 @@ app.use(errorMiddleware);
 
 
 app.listen(PORT, async () => {
-  console.log(`Subscription Tracker API is running on http://localhost:${PORT}`);
-
   await connectToDatabase();
-  startExchangeRateService();
-  await startNotiva();
   await getRedisClient();
+  // startExchangeRateService();
+  // startNotiva();
 });
 
 export default app;

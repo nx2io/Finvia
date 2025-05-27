@@ -17,6 +17,7 @@ import {
 
 // Import middleware
 import { authorize } from '../middlewares/auth.middleware.js'; // General authorization
+import { rateLimitHigh } from '../middlewares/rateLimiters.middleware.js';
 // import { authorizeAdmin } from '../middlewares/auth.middleware.js'; // Admin authorization (routes moved)
 // import errorMiddleware from '../middlewares/error.middleware.js'; // Apply globally or specifically
 import {
@@ -30,10 +31,10 @@ const authRouter = Router();
 // --- Public Routes ---
 
 // POST /v1/auth/signup
-authRouter.post('/signup', registerValidationRules(), handleValidationErrors, signUp);
+authRouter.post('/signup', rateLimitHigh, registerValidationRules(), handleValidationErrors, signUp);
 
 // POST /v1/auth/signin
-authRouter.post('/signin', loginValidationRules(), handleValidationErrors, signIn);
+authRouter.post('/signin', rateLimitHigh, loginValidationRules(), handleValidationErrors, signIn);
 
 // POST /v1/auth/signout
 authRouter.post('/signout', signOut); // No auth needed, clears cookie
@@ -46,7 +47,7 @@ authRouter.get("/google/callback", passport.authenticate("google", { session: fa
 
 // POST /v1/auth/verify-email
 // Basic validation for email and token
-authRouter.post("/verify-email", [
+authRouter.post("/verify-email", rateLimitHigh, [
     body('token').notEmpty().withMessage('Verification token is required'),
     body('email').isEmail().withMessage('Valid email is required').normalizeEmail()
 ], handleValidationErrors, verifyEmail);
@@ -54,18 +55,18 @@ authRouter.post("/verify-email", [
 
 // POST /v1/auth/resend-verification-email
 // Basic validation for email
-authRouter.post("/resend-verification-email", [
+authRouter.post("/resend-verification-email", rateLimitHigh, [
     body('email').isEmail().withMessage('Valid email is required').normalizeEmail()
 ], handleValidationErrors, resendVerificationEmail);
 
 // POST /v1/auth/forgot-password
 // Add validation middleware: validateForgotPassword
 // Add rate limiting middleware
-authRouter.post("/forgot-password", forgotPassword);
+authRouter.post("/forgot-password", rateLimitHigh, forgotPassword);
 
 // POST /v1/auth/reset-password/:token
 // Basic validation for token and password
-authRouter.post("/reset-password/:token", [
+authRouter.post("/reset-password/:token", rateLimitHigh, [
     param('token').notEmpty().withMessage('Reset token is required'),
     body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters long')
 ], handleValidationErrors, resetPassword);

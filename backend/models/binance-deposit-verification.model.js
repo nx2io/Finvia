@@ -29,15 +29,11 @@ const binanceDepositVerificationSchema = new mongoose.Schema({
         required: true,
         enum: [
             'pending',        // Waiting for API check
-            'processing',     // API check in progress
             'verified',       // API confirmed the transaction successfully
-            'mismatch',       // API found transaction, but details (amount?) don't match
-            'not_found',      // API could not find the transaction hash
-            'api_error',      // Error communicating with Binance API
+            'rejected',        // Binance API rejected the transaction
             'manual_review'   // Needs admin intervention
         ],
-        default: 'pending',
-        index: true
+        default: 'pending'
     },
     // Details received from the Binance API (if successful)
     apiResponseData: {

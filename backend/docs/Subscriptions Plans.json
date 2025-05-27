@@ -1,0 +1,90 @@
+[
+  {
+    "planId": "FREE",
+    "name": "Free Plan",
+    "description": "Basic wallet functionality with limited P2P and transaction support.",
+    "price": 0,
+    "currency": "USD",
+    "billingCycle": "free",
+    "transactionLimits": {
+      "dailyVolume": 1000,
+      "monthlyVolume": 5000,
+      "dailyCount": 15,
+      "maxSingleTransaction": 300
+    },
+    "fees": {
+      "withdrawalFeePercent": 2.5,
+      "withdrawalFeeFixed": 1,
+      "p2pTransferFeePercent": 0
+    },
+    "features": ["p2p_basic", "usdt_conversion"],
+    "isPublic": true,
+    "isActive": true
+  },
+  {
+    "planId": "SILVER_MONTHLY",
+    "name": "Silver Plan",
+    "description": "Lower fees and higher limits with access to multiple currencies.",
+    "price": 4.99,
+    "currency": "USD",
+    "billingCycle": "monthly",
+    "transactionLimits": {
+      "dailyVolume": 3000,
+      "monthlyVolume": 15000,
+      "dailyCount": 30,
+      "maxSingleTransaction": 1000
+    },
+    "fees": {
+      "withdrawalFeePercent": 1.5,
+      "withdrawalFeeFixed": 0.75,
+      "p2pTransferFeePercent": 0
+    },
+    "features": ["p2p_multi_currency", "currency_conversion", "support_priority"],
+    "isPublic": true,
+    "isActive": true
+  },
+  {
+    "planId": "GOLD_MONTHLY",
+    "name": "Gold Plan",
+    "description": "High-tier plan with minimal fees and advanced features.",
+    "price": 14.99,
+    "currency": "USD",
+    "billingCycle": "monthly",
+    "transactionLimits": {
+      "dailyVolume": 6000,
+      "monthlyVolume": 30000,
+      "dailyCount": 50,
+      "maxSingleTransaction": 2000
+    },
+    "fees": {
+      "withdrawalFeePercent": 1,
+      "withdrawalFeeFixed": 0.5,
+      "p2pTransferFeePercent": 0
+    },
+    "features": ["priority_support", "p2p_unlimited", "multi_wallets", "currency_conversion"],
+    "isPublic": true,
+    "isActive": true
+  },
+  {
+    "planId": "DIAMOND_MONTHLY",
+    "name": "Diamond Plan",
+    "description": "VIP access with no fees, max limits, and business-ready features.",
+    "price": 29.99,
+    "currency": "USD",
+    "billingCycle": "monthly",
+    "transactionLimits": {
+      "dailyVolume": 8000,
+      "monthlyVolume": 50000,
+      "dailyCount": 100,
+      "maxSingleTransaction": 4000
+    },
+    "fees": {
+      "withdrawalFeePercent": 0,
+      "withdrawalFeeFixed": 0,
+      "p2pTransferFeePercent": 0
+    },
+    "features": ["vip_support", "business_tools", "p2p_unlimited", "currency_conversion", "multi_wallets", "sub_accounts"],
+    "isPublic": true,
+    "isActive": true
+  }
+]

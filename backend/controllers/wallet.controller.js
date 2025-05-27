@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import Wallet from '../models/wallet.model.js';
 import Transaction from '../models/transaction.model.js'; // Needed for recording internal transfers
 
-import { generateWalletNumber } from '../utils/helpres.js';
+import { generateWalletNumber, convertCurrency } from '../utils/helpres.js';
 import { getOrSetCache, clearCache } from "../utils/cache.js";
 
 
@@ -37,6 +37,9 @@ export const getWalletDetails = async (req, res, next) => {
         next(error);
     }
 };
+
+
+
 
 /**
  * @description Create a new sub-wallet
@@ -89,6 +92,9 @@ export const createSubWallet = async (req, res, next) => {
         next(error);
     }
 };
+
+
+
 
 /**
  * @description Update a sub-wallet (e.g., rename)
@@ -190,6 +196,9 @@ export const deleteSubWallet = async (req, res, next) => {
     }
 };
 
+
+
+
 /**
  * @description Transfer funds between main wallet and sub-wallet, or between sub-wallets
  * @route POST /v1/wallet/transfer-internal
@@ -197,7 +206,7 @@ export const deleteSubWallet = async (req, res, next) => {
  */
 export const transferInternal = async (req, res, next) => {
     const userId = req.user._id;
-    const { amount, currency, type, from, to, description } = req.body;
+    const { amount, currency, type, from, to } = req.body;
 
     if (!amount || amount <= 0 || !currency || !type) {
         return res.status(400).json({ success: false, message: 'Missing required fields: amount, currency, type' });
@@ -210,22 +219,26 @@ export const transferInternal = async (req, res, next) => {
         const wallet = await Wallet.findOne({ userId }).session(session);
         if (!wallet) throw new Error('Main wallet not found');
 
-        if (currency !== wallet.primaryCurrency) {
-            throw new Error(`Invalid currency. Wallet currency is ${wallet.primaryCurrency}`);
-        }
-
         let sourceSubIndex = -1;
         let destSubIndex = -1;
+        let convertedAmount = parseFloat(amount);
 
-        // التحقق من المصدر والوجهة حسب النوع
         if (type === 'P2S') {
             if (!to) throw new Error('Destination sub-wallet required for P2S');
             destSubIndex = wallet.subWallets.findIndex(sw => sw.subWalletNumber === to);
             if (destSubIndex === -1) throw new Error('Destination sub-wallet not found');
 
+            const destSub = wallet.subWallets[destSubIndex];
+
             if (wallet.mainBalance < amount) throw new Error('Insufficient funds');
+
+            // تحويل العملة إن لزم
+            if (wallet.primaryCurrency !== destSub.currency) {
+                convertedAmount = await convertCurrency(amount, wallet.primaryCurrency, destSub.currency);
+            }
+
             wallet.mainBalance = (wallet.mainBalance - amount).toFixed(2);
-            wallet.subWallets[destSubIndex].balance = (parseFloat(wallet.subWallets[destSubIndex].balance) + parseFloat(amount)).toFixed(2);
+            destSub.balance = (parseFloat(destSub.balance) + convertedAmount).toFixed(2);
         }
 
         else if (type === 'S2P') {
@@ -234,9 +247,16 @@ export const transferInternal = async (req, res, next) => {
             if (sourceSubIndex === -1) throw new Error('Source sub-wallet not found');
 
             const sourceSub = wallet.subWallets[sourceSubIndex];
+
             if (sourceSub.balance < amount) throw new Error('Insufficient funds');
+
+            // تحويل العملة إن لزم
+            if (sourceSub.currency !== wallet.primaryCurrency) {
+                convertedAmount = await convertCurrency(amount, sourceSub.currency, wallet.primaryCurrency);
+            }
+
             sourceSub.balance = (sourceSub.balance - amount).toFixed(2);
-            wallet.mainBalance = (parseFloat(wallet.mainBalance) + parseFloat(amount)).toFixed(2);
+            wallet.mainBalance = (parseFloat(wallet.mainBalance) + convertedAmount).toFixed(2);
         }
 
         else if (type === 'S2S') {
@@ -245,15 +265,20 @@ export const transferInternal = async (req, res, next) => {
 
             sourceSubIndex = wallet.subWallets.findIndex(sw => sw.subWalletNumber === from);
             destSubIndex = wallet.subWallets.findIndex(sw => sw.subWalletNumber === to);
-
             if (sourceSubIndex === -1 || destSubIndex === -1) throw new Error('Source or destination sub-wallet not found');
 
             const sourceSub = wallet.subWallets[sourceSubIndex];
             const destSub = wallet.subWallets[destSubIndex];
 
             if (sourceSub.balance < amount) throw new Error('Insufficient funds');
+
+            // تحويل العملة إن لزم
+            if (sourceSub.currency !== destSub.currency) {
+                convertedAmount = await convertCurrency(amount, sourceSub.currency, destSub.currency);
+            }
+
             sourceSub.balance = (sourceSub.balance - amount).toFixed(2);
-            destSub.balance = (parseFloat(destSub.balance) + parseFloat(amount)).toFixed(2);
+            destSub.balance = (parseFloat(destSub.balance) + convertedAmount).toFixed(2);
         }
 
         await wallet.save({ session });

@@ -39,8 +39,7 @@ const walletSchema = new mongoose.Schema({
     userId: { 
         type: mongoose.Schema.Types.ObjectId, 
         ref: 'User', 
-        required: true, 
-        index: true, 
+        required: true,
         unique: true // Assuming one main wallet per user for this core model
     },
     // Wallet number might be better generated and less guessable
@@ -48,7 +47,6 @@ const walletSchema = new mongoose.Schema({
         type: String,
         required: true,
         unique: true,
-        index: true,
         // Consider a more secure, potentially non-sequential format
         // Example: Use a UUID or a combination of user ID hash + random string
         // Removed length and digit match constraints for flexibility
@@ -77,8 +75,7 @@ const walletSchema = new mongoose.Schema({
         type: String,
         enum: ['active', 'suspended', 'frozen', 'closed'],
         required: true,
-        default: 'active',
-        index: true
+        default: 'active'
     },
     // Reason for suspension or freeze
     statusReason: {
@@ -103,7 +100,7 @@ const walletSchema = new mongoose.Schema({
 }, { timestamps: { createdAt: 'createdAt', updatedAt: 'lastUpdatedAt' } });
 
 // Index for faster user wallet lookups
-walletSchema.index({ userId: 1 });
+walletSchema.index({ status: 1 })
 
 // Pre-save hook to update lastUpdatedAt timestamp
 walletSchema.pre('save', function(next) {

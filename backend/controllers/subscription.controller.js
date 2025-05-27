@@ -4,7 +4,12 @@ import UserSubscription from '../models/user-subscription.model.js';
 import User from '../models/user.model.js';
 import Wallet from '../models/wallet.model.js';
 import Transaction from '../models/transaction.model.js';
+
+import { SERVER_URL } from '../config/env.js';
+
 import { getOrSetCache, clearCache } from "../utils/cache.js";
+import { workflowClient } from '../config/upstash.js';
+import { convertCurrency } from '../utils/helpres.js';
 
 // Helper function for atomic balance updates (Consider moving to a shared utility)
 const updateBalance = async (walletId, amount, subWalletId = null, session = null) => {
@@ -93,9 +98,9 @@ export const getMySubscription = async (req, res, next) => {
 export const changeSubscription = async (req, res, next) => {
     // SECURITY: Add input validation middleware
     const userId = req.user._id;
-    const { newPlanIdString } = req.body; // e.g., 'PRO', 'BUSINESS'
+    const { newPlanId } = req.body; // e.g., 'PRO', 'BUSINESS'
 
-    if (!newPlanIdString) {
+    if (!newPlanId) {
         return res.status(400).json({ success: false, message: 'New Plan ID is required' });
     }
 
@@ -104,7 +109,7 @@ export const changeSubscription = async (req, res, next) => {
 
     try {
         // 1. Get New Plan, Current Subscription, User, and Wallet
-        const newPlan = await SubscriptionPlan.findOne({ planId: newPlanIdString, isActive: true }).session(session);
+        const newPlan = await SubscriptionPlan.findOne({ planId: newPlanId, isActive: true }).session(session);
         const currentSubscription = await UserSubscription.findOne({ userId: userId, status: 'active' }).populate('planId').session(session);
         const user = await User.findById(userId).populate('mainWalletId').session(session);
 
@@ -131,21 +136,20 @@ export const changeSubscription = async (req, res, next) => {
         // Add logic here if downgrades should only apply at the end of the current cycle
 
         // 4. Calculate Cost & Check Balance
-        const cost = newPlan.price; // Simplification: Charge full price immediately
+        let cost = newPlan.price;
         const currency = newPlan.currency;
-        // TODO: Implement pro-rating logic if needed
 
         if (currency !== wallet.primaryCurrency) {
-            throw new Error(`Plan currency (${currency}) does not match wallet currency (${wallet.primaryCurrency}). Currency conversion not supported yet.`);
+            cost = await convertCurrency(newPlan.price, currency, wallet.primaryCurrency);
         }
 
         if (cost > 0) {
             // Deduct cost from main balance
             await updateBalance(wallet._id, -cost, null, session);
         } else {
-            // Changing to a free plan (should not happen via this route?)
             console.warn(`Changing to a free plan (${newPlan.planId}) for user ${userId}. Cost is zero.`);
         }
+
 
         // 5. Create Payment Transaction Record
         const now = new Date();
@@ -154,7 +158,7 @@ export const changeSubscription = async (req, res, next) => {
             paymentTx = new Transaction({
                 userId: userId,
                 walletId: wallet._id,
-                type: 'SUBSCRIPTION_PAYMENT',
+                type: 'SUBSCRIPTION_FEE',
                 status: 'completed',
                 amount: cost,
                 currency: currency,
@@ -194,6 +198,28 @@ export const changeSubscription = async (req, res, next) => {
         // Add history tracking if needed
         currentSubscription.history.push({ action: 'changed', fromPlan: oldPlanId, toPlan: newPlan._id, date: now });
         await currentSubscription.save({ session });
+
+        // 6.5 Trigger Reminder Workflow if paid plan
+        if (newPlan.price > 0) {
+        try {
+            const { workflowRunId } = await workflowClient.trigger({
+            url: `${SERVER_URL}/api/v1/workflows/subscription/reminder`,
+            body: {
+                subscriptionId: currentSubscription._id,
+            },
+            headers: {
+                'content-type': 'application/json',
+            },
+            retries: 0,
+            });
+
+            console.log("Reminder workflow triggered:", workflowRunId);
+        } catch (workflowError) {
+            console.error("Failed to trigger reminder workflow:", workflowError);
+            // continue without blocking the subscription update
+        }
+        }
+
 
         // 7. Update User Document (optional, denormalized field)
         user.subscription = {

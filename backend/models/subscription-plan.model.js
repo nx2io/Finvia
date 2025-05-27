@@ -77,7 +77,6 @@ const subscriptionPlanSchema = new mongoose.Schema({
 
 // Index for quick lookup of active public plans
 subscriptionPlanSchema.index({ isActive: 1, isPublic: 1 });
-subscriptionPlanSchema.index({ planId: 1 });
 
 // Pre-save hook to update lastUpdatedAt timestamp
 subscriptionPlanSchema.pre('save', function(next) {

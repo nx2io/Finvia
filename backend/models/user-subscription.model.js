@@ -36,6 +36,12 @@ const userSubscriptionSchema = new mongoose.Schema({
         default: 'active',
         index: true
     },
+    history: [{
+        action:{ type: String, require: [true, 'actions is reqiure'], trim: true },
+        fromPlan: { type: String, required: [true, 'fromPlan is reqiure'], trim: true },
+        toPlan: { type: String, required: [true, 'toPlan is reqiure'], trim: true },
+        date: { type: Date, required: [true, 'date is reqiure'], default: Date.now }
+    }],
     startDate: {
         type: Date,
         required: true,

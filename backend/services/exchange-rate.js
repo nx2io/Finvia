@@ -1,11 +1,11 @@
 // services/exchange-rate.js
 import cron from 'node-cron';
 
-import ExchangeRate from '../models/exchange-rate.model';
-import logger from '../logger/winston.logger';
+import ExchangeRate from '../models/exchange.model.js';
+import logger from '../logger/winston.logger.js';
 import { notifyOwner } from './notiva.js'; // سنصنع هذا بعد قليل
 
-import { OPR_APP_KEY } from '../config/env';
+import { OPR_APP_KEY } from '../config/env.js';
 
 const API_URL = `https://openexchangerates.org/api/latest.json?app_id=${OPR_APP_KEY}`;
 
