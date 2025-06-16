@@ -8,10 +8,13 @@ erDiagram
     USER ||--o{ FUNDREQUEST : "requests"
     USER ||--o{ FUNDREQUEST : "receives request from"
     USER ||--o{ BINANCEDEPOSITVERIFICATION : "owns deposit"
+    USER ||--o{ AUDIT_LOG : "creates"
+    USER ||--o{ IDEMPOTENCY_KEY : "uses"
 
     WALLET ||--|{ SUBWALLET : "contains"
     WALLET ||--o{ TRANSACTION : "involved in"
     WALLET ||--|{ USER : "belongs to"
+    WALLET ||--o{ TRANSACTION_ENTRY : "has entries"
 
     TRANSACTION ||--|{ USER : "initiated by"
     TRANSACTION ||--|{ WALLET : "affects"
@@ -19,6 +22,7 @@ erDiagram
     TRANSACTION ||--o{ BINANCEDEPOSITVERIFICATION : "verified by"
     TRANSACTION ||--o{ FUNDREQUEST : "fulfills"
     TRANSACTION ||--o{ USERSUBSCRIPTION : "pays for"
+    TRANSACTION ||--o{ TRANSACTION_ENTRY : "has entries"
 
     SUBSCRIPTIONPLAN ||--o{ USERSUBSCRIPTION : "defines"
 
@@ -32,6 +36,47 @@ erDiagram
 
     BINANCEDEPOSITVERIFICATION ||--|{ USER : "belongs to"
     BINANCEDEPOSITVERIFICATION ||--|{ TRANSACTION : "verifies"
+
+    AUDIT_LOG {
+        ObjectId _id PK
+        ObjectId userId FK
+        String action
+        %% user | admin | system
+        String actorType
+        String resourceType
+        Object resourceId
+        %% { before, after }
+        Object changes
+        String ipAddress
+        String userAgent
+        String location
+        Date timestamp
+    }
+
+    IDEMPOTENCY_KEY {
+        ObjectId _id PK
+        ObjectId userId FK
+        String key UK
+        String endpoint
+        String payloadHash
+        Object responseSnapshot
+        %% success | failed
+        String status
+        Date createdAt
+        Date expiresAt
+    }
+
+    TRANSACTION_ENTRY {
+        ObjectId _id PK
+        ObjectId transactionId FK
+        ObjectId walletId FK
+        ObjectId subWalletId FK
+        %% credit | debit
+        String entryType
+        Number amount
+        String currency
+        Date createdAt
+    }
 
     USER {
         ObjectId _id PK
@@ -117,6 +162,8 @@ erDiagram
         ObjectId bankAccountId FK "Ref BANK_ACCOUNT (Withdrawal)"
         String depositMethod
         Object depositDetails
+        Boolean isReversed
+        ObjectId reversalTransactionId FK "(optional)"
         Date initiatedAt
         Date completedAt
         String failureReason
@@ -185,4 +232,3 @@ erDiagram
         Date lastCheckedAt
         Date verifiedAt
     }
-
