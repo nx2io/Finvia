@@ -28,7 +28,7 @@ This document summarizes the current backend progress for the platform, includin
 - [x] Delete bank account
 - [x] List linked bank accounts
 - [x] Set a bank account as default
-- [ ] Two-Factor Authentication (TOTP support via `otplib`) *(pending)*
+- [x] Two-Factor Authentication (TOTP support via `otplib`)
 - [ ] Search users by name/email (for P2P transfers) *(pending)*
 
 ---
@@ -65,9 +65,9 @@ This document summarizes the current backend progress for the platform, includin
 ---
 
 ### 🔐 2FA Support
-- [ ] Enable/disable two-factor authentication (using TOTP)
-- [ ] Verify TOTP tokens
-- [ ] Get 2FA status
+- [x] Enable/disable two-factor authentication (using TOTP)
+- [x] Verify TOTP tokens
+- [x] Get 2FA status
 
 ---
 
@@ -89,37 +89,37 @@ This document summarizes the current backend progress for the platform, includin
 ## 🚧 Pending Controller Validations
 
 ### 💸 Transaction Controller
-- [ ] P2P transfers (send/receive)
-- [ ] Fund request flow (create, respond, cancel, fulfill)
+- [x] P2P transfers (send/receive)
+- [x] Fund request flow (create, respond, cancel, fulfill)
 - [ ] Withdrawals to linked bank account
-- [ ] Transaction history & detail view
-- [ ] MongoDB sessions for transaction integrity
-- [ ] Plan-based transfer limits and fee validation
+- [x] Transaction history & detail view
+- [x] MongoDB sessions for transaction integrity
+- [ ] Plan-based transfer limits and fee validation *(NEED TO CHECK)*
 
 ---
 
 ### 📦 Subscription Controller
-- [ ] View available plans
-- [ ] Get current subscription
-- [ ] Change plan (upgrade/downgrade)
-- [ ] Cancel auto-renewal
-- [ ] Mongo session for atomic balance deduction & plan update
+- [x] View available plans
+- [x] Get current subscription
+- [x] Change plan (upgrade/downgrade)
+- [x] Cancel auto-renewal
+- [x] Mongo session for atomic balance deduction & plan update
 
 ---
 
 ### 💰 Deposit Controller
-- [ ] Get Binance USDT deposit instructions
-- [ ] Submit deposit verification (TXID, screenshot, amount)
-- [ ] Track verification status
+- [x] Get Binance USDT deposit instructions
+- [x] Submit deposit verification (TXID, screenshot, amount)
+- [x] Track verification status
 
 ---
 
 ### 🛠 Admin Controller
-- [ ] Manage users (CRUD)
-- [ ] Manage KYC submissions
-- [ ] Approve/reject deposits
-- [ ] Manage subscription plans (CRUD)
-- [ ] Mongo sessions for atomic KYC/deposit approvals
+- [x] Manage users (CRUD)
+- [x] Manage KYC submissions
+- [x] Approve/reject deposits
+- [x] Manage subscription plans (CRUD)
+- [x] Mongo sessions for atomic KYC/deposit approvals
 
 ---
 
@@ -136,4 +136,4 @@ This document summarizes the current backend progress for the platform, includin
 
 ---
 
-_Last updated: May 20, 2025_
+_Last updated: JUN 13, 2025_

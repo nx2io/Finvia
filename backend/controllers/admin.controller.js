@@ -1,16 +1,10 @@
 import mongoose from 'mongoose';
 
-import User from '../models/user.model.js';
-import Wallet from '../models/wallet.model.js';
-import Transaction from '../models/transaction.model.js';
-import FundRequest from '../models/fund-request.model.js';
-import SubscriptionPlan from '../models/subscription-plan.model.js';
-import UserSubscription from '../models/user-subscription.model.js';
-import BinanceDepositVerification from '../models/binance-deposit-verification.model.js';
+import models from '../models/index.js';
 
 import { workflowClient } from '../config/upstash.js'
-import { convertCurrency, updateBalance } from '../utils/helpres.js';
-import { getOrSetCache, clearCache } from "../utils/cache.js";
+import { convertCurrency, updateBalance } from '../services/utils/helpers.js';
+import { getOrSetCache, clearCache } from "../services/utils/cache.js";
 
 
 // --- User Management ---
@@ -40,8 +34,8 @@ export const listUsers = async (req, res, next) => {
     };
 
     try {
-        const users = await User.find(query, '-password -__v', options);
-        const totalUsers = await User.countDocuments(query);
+        const users = await models.models.User.find(query, '-password -__v', options);
+        const totalUsers = await models.models.User.countDocuments(query);
 
         res.status(200).json({
             success: true,
@@ -66,7 +60,7 @@ export const listUsers = async (req, res, next) => {
 export const getUserDetails = async (req, res, next) => {
     const userId = req.params.userId;
     try {
-        const user = await User.findById(userId)
+        const user = await models.User.findById(userId)
             .select('-password -__v')
             .populate('mainWalletId', 'walletNumber primaryCurrency mainBalance status')
             .populate('subscription.planId', 'name price'); // Populate current plan details
@@ -99,7 +93,7 @@ export const updateUserStatus = async (req, res, next) => {
     }
 
     try {
-        const user = await User.findById(userId);
+        const user = await models.User.findById(userId);
         if (!user) {
             return res.status(404).json({ success: false, message: "User not found" });
         }
@@ -148,20 +142,20 @@ export const deleteUser = async (req, res, next) => {
     const session = await mongoose.startSession();
     session.startTransaction();
     try {
-        const user = await User.findById(userId).session(session);
+        const user = await models.User.findById(userId).session(session);
         if (!user) {
             throw new Error("User not found");
         }
 
         // Perform cleanup: Delete related wallet, subscriptions, transactions, etc.
-        await Wallet.deleteOne({ userId: userId }).session(session);
-        await UserSubscription.deleteMany({ userId: userId }).session(session);
-        await Transaction.deleteMany({ userId: userId }).session(session);
-        await FundRequest.deleteMany({ $or: [{ requesterUserId: userId }, { requestedUserId: userId }] }).session(session);
-        await BinanceDepositVerification.deleteMany({ userId: userId }).session(session);
+        await models.Wallet.deleteOne({ userId: userId }).session(session);
+        await models.UserSubscription.deleteMany({ userId: userId }).session(session);
+        await models.Transaction.deleteMany({ userId: userId }).session(session);
+        await models.FundRequest.deleteMany({ $or: [{ requesterUserId: userId }, { requestedUserId: userId }] }).session(session);
+        await models.models.BinanceDepositVerification.deleteMany({ userId: userId }).session(session);
         // ... other related data
 
-        await User.findByIdAndDelete(userId).session(session);
+        await models.User.findByIdAndDelete(userId).session(session);
 
         await session.commitTransaction();
         session.endSession();
@@ -199,13 +193,13 @@ export const listPendingKyc = async (req, res, next) => {
     
 
     try {
-        const users = await User.find(query)
+        const users = await models.User.find(query)
         .select('username fullName email kyc')
         .limit(parseInt(limit))
         .skip((parseInt(page) - 1) * parseInt(limit))
         .sort({ 'kyc.submittedAt': 1 });
 
-        const totalPending = await User.countDocuments(query);
+        const totalPending = await models.User.countDocuments(query);
 
         res.status(200).json({
             success: true,
@@ -240,7 +234,7 @@ export const reviewKyc = async (req, res, next) => {
     }
 
     try {
-        const user = await User.findById(userId);
+        const user = await models.User.findById(userId);
         if (!user || !user.kyc || user.kyc.kycstatus !== 'pending') {
             return res.status(404).json({ success: false, message: 'User not found or KYC not pending review' });
         }
@@ -281,14 +275,14 @@ export const listPendingDeposits = async (req, res, next) => {
     const query = { status: 'pending' };
 
     try {
-        const verifications = await BinanceDepositVerification.find(query, null)
+        const verifications = await models.BinanceDepositVerification.find(query, null)
         .limit(parseInt(limit),)
         .skip((parseInt(page) - 1) * parseInt(limit),)
         .sort({ createdAt: 1 }) // Sort by creation time (oldest first)
         .populate('userId', 'username email') // Populate user info
         .populate('depositTransactionId', 'status amount currency'); // Populate related transaction info
 
-        const totalPending = await BinanceDepositVerification.countDocuments(query);
+        const totalPending = await models.BinanceDepositVerification.countDocuments(query);
 
         res.status(200).json({
             success: true,
@@ -323,7 +317,7 @@ export const approveDeposit = async (req, res, next) => {
 
     try {
         // 1. Find the verification record
-        const verification = await BinanceDepositVerification.findById(verificationId).populate("userId", 'mainWalletId').session(session);
+        const verification = await models.BinanceDepositVerification.findById(verificationId).populate("userId", 'mainWalletId').session(session);
 
         // 2. Check if verification record exists
         if (!verification) {
@@ -336,7 +330,7 @@ export const approveDeposit = async (req, res, next) => {
         }
 
         // 4. Find the associated transaction
-        const depositTx = await Transaction.findById(verification.depositTransactionId).session(session);
+        const depositTx = await models.Transaction.findById(verification.depositTransactionId).session(session);
         if (!depositTx) {
             // This case might indicate data inconsistency, log it and potentially throw
             console.error(`CRITICAL: Associated transaction record ${verification.depositTransactionId} not found for verification ${verificationId}.`);
@@ -349,7 +343,7 @@ export const approveDeposit = async (req, res, next) => {
         }
 
         // 6. Find the user and their wallet
-        const user = await User.findById(verification.userId).populate('mainWalletId').session(session);
+        const user = await models.User.findById(verification.userId).populate('mainWalletId').session(session);
         if (!user || !user.mainWalletId) {
             throw new Error('User or user wallet not found.');
         }
@@ -422,7 +416,7 @@ export const rejectDeposit = async (req, res, next) => {
     session.startTransaction();
 
     try {
-        const verification = await BinanceDepositVerification.findById(verificationId).session(session);
+        const verification = await models.BinanceDepositVerification.findById(verificationId).session(session);
         if (!verification || verification.status !== 'pending') {
             throw new Error('Deposit verification record not found or not pending.');
         }
@@ -433,7 +427,7 @@ export const rejectDeposit = async (req, res, next) => {
         verification.processedBy = adminUserId;
         await verification.save({ session });
 
-        const updatedTx = await Transaction.findByIdAndUpdate(
+        const updatedTx = await models.Transaction.findByIdAndUpdate(
             verification.depositTransactionId,
             { $set: { status: 'rejected', failureReason: reason, completedAt: new Date() } },
             { new: true, session: session }
@@ -466,7 +460,7 @@ export const rejectDeposit = async (req, res, next) => {
  */
 export const listAllSubscriptionPlans = async (req, res, next) => {
     try {
-        const plans = await SubscriptionPlan.find().sort({ price: 1 });
+        const plans = await models.SubscriptionPlan.find().sort({ price: 1 });
         res.status(200).json({ success: true, data: plans });
     } catch (error) {
         console.error("Admin List Plans Error:", error);
@@ -481,11 +475,11 @@ export const listAllSubscriptionPlans = async (req, res, next) => {
  */
 export const createSubscriptionPlan = async (req, res, next) => {
     try {
-        const existingPlan = await SubscriptionPlan.findOne({ planId: req.body.planId });
+        const existingPlan = await models.SubscriptionPlan.findOne({ planId: req.body.planId });
         if (existingPlan) {
             return res.status(409).json({ success: false, message: `Plan with ID '${req.body.planId}' already exists.` });
         }
-        const newPlan = new SubscriptionPlan(req.body);
+        const newPlan = new models.SubscriptionPlan(req.body);
         await newPlan.save();
         await clearCache('subscriptionPlans'); // Clear public cache
         res.status(201).json({ success: true, message: 'Subscription plan created successfully', data: newPlan });
@@ -506,7 +500,7 @@ export const createSubscriptionPlan = async (req, res, next) => {
 export const updateSubscriptionPlan = async (req, res, next) => {
     const planId = req.params.planObjectId?.toUpperCase();
     try {
-        const updatedPlan = await SubscriptionPlan.findOneAndUpdate({ planId }, req.body, { new: true, runValidators: true });
+        const updatedPlan = await models.SubscriptionPlan.findOneAndUpdate({ planId }, req.body, { new: true, runValidators: true });
         if (!updatedPlan) {
             return res.status(404).json({ success: false, message: 'Subscription plan not found' });
         }
@@ -528,7 +522,7 @@ export const bannedUser = async (req, res, next) => {
     // Requires authorizeAdmin middleware
     const userId = req.params.id;
     try {
-      const user = await User.findById(userId);
+      const user = await models.User.findById(userId);
       if (!user) {
         return res.status(404).json({ success: false, message: "User not found" });
       }
@@ -553,7 +547,7 @@ export const bannedUser = async (req, res, next) => {
     const userId = req.params.id;
     try {
       const user = await getOrSetCache(`user:${userId}`, async () => {
-        return await User.findById(userId).select("-password -__v");
+        return await models.User.findById(userId).select("-password -__v");
       }, 60);
   
       if (!user) {
@@ -571,7 +565,7 @@ export const bannedUser = async (req, res, next) => {
       const identifier = req.params.identifier; // Can be email or username
       try {
           const user = await getOrSetCache(`user:${identifier}`, async () => {
-              return await User.findOne({ $or: [{ email: identifier }, { username: identifier }] }).select("-password -__v");
+              return await models.User.findOne({ $or: [{ email: identifier }, { username: identifier }] }).select("-password -__v");
           }, 60);
   
           if (!user) {

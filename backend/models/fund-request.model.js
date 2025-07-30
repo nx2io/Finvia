@@ -2,6 +2,21 @@ import mongoose from 'mongoose';
 
 // Model to manage peer-to-peer fund requests between users
 const fundRequestSchema = new mongoose.Schema({
+    REID: { // Unique request ID
+        type: String,
+        unique: true,
+        required: true,
+        index: true
+    },
+    REFREID: { // Reference ID for related entities (e.g., Transaction)
+        type: String,
+        index: true
+    },
+    requesterUserUID: {
+        type: String,
+        required: true,
+        index: true
+    },
     requesterUserId: { // The user initiating the request
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
@@ -13,14 +28,24 @@ const fundRequestSchema = new mongoose.Schema({
         ref: 'Wallet',
         required: true
     },
+    requesterWalletNumber: {
+        type: String,
+        required: true,
+        index: true
+    },
     requestedUserId: { // The user from whom the funds are requested
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
         required: true,
         index: true
     },
+    requestedUserUID: {
+        type: String,
+        required: true,
+        index: true
+    },
     amount: {
-        type: Number,
+        type: mongoose.Schema.Types.Decimal128,
         required: true,
         min: [0.01, 'Request amount must be positive'] // Minimum request amount
         // Use mongoose-decimal128 for precision
@@ -28,7 +53,7 @@ const fundRequestSchema = new mongoose.Schema({
     currency: { // Currency of the requested amount (should match requester's wallet currency)
         type: String,
         required: true,
-        enum: ['USD', 'SAR', 'EUR']
+        enum: ['USD']
     },
     status: {
         type: String,
@@ -53,6 +78,10 @@ const fundRequestSchema = new mongoose.Schema({
     fulfillmentTransactionId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Transaction',
+        index: true
+    },
+    fulfillmentTransactionUID: {
+        type: String,
         index: true
     },
     rejectionReason: { // Optional reason if rejected

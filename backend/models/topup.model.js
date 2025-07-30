@@ -9,4 +9,6 @@ const topupSchema = new mongoose.Schema({
   timestamp: { type: Date, default: Date.now }
 });
 
-module.exports = mongoose.model('Topup', topupSchema);
+const TopUp = mongoose.model('Topup', topupSchema);
+
+export default TopUp

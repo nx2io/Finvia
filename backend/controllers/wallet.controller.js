@@ -1,9 +1,8 @@
 import mongoose from 'mongoose';
-import Wallet from '../models/wallet.model.js';
-import Transaction from '../models/transaction.model.js'; // Needed for recording internal transfers
+import models from '../models/index.js';
 
-import { generateWalletNumber, convertCurrency } from '../utils/helpres.js';
-import { getOrSetCache, clearCache } from "../utils/cache.js";
+import { generateWalletNumber, convertCurrency, generateUniqueTransactionId } from '../services/utils/helpers.js';
+import { getOrSetCache, clearCache } from "../services/utils/cache.js";
 
 
 
@@ -18,7 +17,7 @@ export const getWalletDetails = async (req, res, next) => {
     try {
         // Use cache
         const walletDetails = await getOrSetCache(`walletDetails:${userId}`, async () => {
-            const wallet = await Wallet.findOne({ userId: userId })
+            const wallet = await models.Wallet.findOne({ userId: userId })
                 .select('-__v -createdAt -lastUpdatedAt'); // Exclude unnecessary fields
             if (!wallet) {
                 // This case should ideally not happen if wallet is created at signup
@@ -56,7 +55,7 @@ export const createSubWallet = async (req, res, next) => {
     }
 
     try {
-        const wallet = await Wallet.findOne({ userId: userId });
+        const wallet = await models.Wallet.findOne({ userId: userId });
         if (!wallet) {
             return res.status(404).json({ success: false, message: 'Main wallet not found' });
         }
@@ -115,7 +114,7 @@ export const updateSubWallet = async (req, res, next) => {
     }
 
     try {
-        const wallet = await Wallet.findOne({ userId: userId, 'subWallets._id': subWalletId });
+        const wallet = await models.Wallet.findOne({ userId: userId, 'subWallets._id': subWalletId });
         if (!wallet) {
             return res.status(404).json({ success: false, message: 'Sub-wallet not found' });
         }
@@ -127,7 +126,7 @@ export const updateSubWallet = async (req, res, next) => {
         }
 
         // Update using positional operator
-        const result = await Wallet.updateOne(
+        const result = await models.Wallet.updateOne(
             { _id: wallet._id, 'subWallets._id': subWalletId },
             { $set: { 'subWallets.$.name': name } }
         );
@@ -161,7 +160,7 @@ export const deleteSubWallet = async (req, res, next) => {
     }
 
     try {
-        const wallet = await Wallet.findOne({ userId: userId, 'subWallets._id': subWalletId });
+        const wallet = await models.Wallet.findOne({ userId: userId, 'subWallets._id': subWalletId });
         if (!wallet) {
             return res.status(404).json({ success: false, message: 'Sub-wallet not found' });
         }
@@ -177,7 +176,7 @@ export const deleteSubWallet = async (req, res, next) => {
         }
 
         // Pull the sub-wallet from the array
-        const result = await Wallet.updateOne(
+        const result = await models.Wallet.updateOne(
             { _id: wallet._id },
             { $pull: { subWallets: { _id: subWalletId } } }
         );
@@ -216,7 +215,7 @@ export const transferInternal = async (req, res, next) => {
     session.startTransaction();
 
     try {
-        const wallet = await Wallet.findOne({ userId }).session(session);
+        const wallet = await models.Wallet.findOne({ userId }).session(session);
         if (!wallet) throw new Error('Main wallet not found');
 
         let sourceSubIndex = -1;
@@ -283,13 +282,17 @@ export const transferInternal = async (req, res, next) => {
 
         await wallet.save({ session });
 
-        const transaction = new Transaction({
-            userId,
+        
+        const transaction = new models.Transaction({
+            TXID: await generateUniqueTransactionId(),
+            userUID: req.user.UUID,
+            userId: userId,
             walletId: wallet._id,
+            walletNumber: wallet.walletNumber,
             type: 'SUBWALLET_TRANSFER',
             status: 'completed',
-            amount,
-            currency,
+            amount: amount,
+            currency: currency,
             fee: 0,
             netAmount: amount,
             description: `Transfer (${type}) From ${from} to ${to}`,

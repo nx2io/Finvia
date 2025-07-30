@@ -3,7 +3,7 @@ import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import User from "../models/user.model.js";
 
 import { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, SERVER_URL } from './env.js';
-import { sendWelcomeEmail } from "../utils/emails.js";
+import { sendWelcomeEmail } from "../services/utils/emails.js";
 passport.use(
   new GoogleStrategy(
     {

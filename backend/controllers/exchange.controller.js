@@ -1,11 +1,13 @@
-// Import ExchangeRate model
-import ExchangeRate from '../models/exchange.model.js';
-// Import cache helper
-import { getOrSetCache } from '../utils/cache.js';
+import models from '../models/index.js';
 
-// POST /v1/exchange/convert
-// @desc Convert an amount from one currency to another based on latest exchange rates
-// @access Private (authentication assumed globally handled)
+import { getOrSetCache } from '../services/utils/cache.js';
+
+
+/**
+ * POST /v1/exchange/convert
+ * @desc Convert an amount from one currency to another based on latest exchange rates
+ * @access Private (authentication assumed globally handled)
+ */
 export async function convertCurrency(req, res) {
   try {
     // Destructure input from request body
@@ -19,7 +21,7 @@ export async function convertCurrency(req, res) {
     // Attempt to retrieve latest exchange rates from cache or fallback to DB
     const data = await getOrSetCache('exchange_rates_latest', async () => {
       // Fetch the most recent exchange rate document
-      const latest = await ExchangeRate.findOne().sort({ fetchedAt: -1 }).lean();
+      const latest = await models.ExchangeRate.findOne().sort({ fetchedAt: -1 }).lean();
       if (!latest) throw new Error('No exchange rates found');
       return latest;
     });

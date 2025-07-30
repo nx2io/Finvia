@@ -9,7 +9,7 @@ const bankTransferSchema = new mongoose.Schema({
 
   targetCurrency: {
     type: String,
-    enum: ['USD', 'SAR', 'EUR'],
+    enum: ['USD'],
     required: true
   },
 
@@ -76,4 +76,6 @@ bankTransferSchema.pre('save', function (next) {
   next();
 });
 
-module.exports = mongoose.model('BankTransfer', bankTransferSchema);
+const BankTransfer = mongoose.model('BankTransfer', bankTransferSchema);
+
+export default BankTransfer

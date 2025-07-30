@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { ENCRYPTION_KEY } from '../config/env.js'; // Assuming ENCRYPTION_KEY is loaded into env config
+import { ENCRYPTION_KEY, SECRET_SALT } from '../../config/env.js'; // Assuming ENCRYPTION_KEY is loaded into env config
 
 const ALGORITHM = 'aes-256-gcm';
 // Key length check (should be done in env config loading ideally)
@@ -15,14 +15,14 @@ const key = Buffer.from(ENG_KEY, 'hex');
  * @returns {string} The encrypted text in format 'iv:authTag:encryptedData' (hex encoded).
  * Returns null if input is null or undefined.
  */
-export const encrypt = (text) => {
-  if (text == null) { // Check for null or undefined
+export const encrypt = (t) => {
+  if (t == null) { // Check for null or undefined
     return null;
   }
   try {
     const iv = crypto.randomBytes(12); // 96 bits is recommended for GCM
     const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
-    const encrypted = Buffer.concat([cipher.update(String(text), 'utf8'), cipher.final()]);
+    const encrypted = Buffer.concat([cipher.update(String(t), 'utf8'), cipher.final()]);
     const authTag = cipher.getAuthTag();
     // Combine IV, authTag, and encrypted data, encode as hex
     return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted.toString('hex')}`;
@@ -35,16 +35,16 @@ export const encrypt = (text) => {
 
 /**
  * Decrypts text encrypted with AES-256-GCM.
- * @param {string} encryptedText The encrypted text in format 'iv:authTag:encryptedData' (hex encoded).
+ * @param {string} et The encrypted text in format 'iv:authTag:encryptedData' (hex encoded).
  * @returns {string} The original decrypted text.
  * Returns null if input is null, undefined, or invalid format.
  */
-export const decrypt = (encryptedText) => {
-  if (encryptedText == null) { // Check for null or undefined
+export const decrypt = (et) => {
+  if (et == null) { // Check for null or undefined
     return null;
   }
   try {
-    const parts = encryptedText.split(':');
+    const parts = et.split(':');
     if (parts.length !== 3) {
       console.error('Decryption failed: Invalid encrypted text format.');
       return null; // Or throw an error
@@ -69,3 +69,15 @@ export const decrypt = (encryptedText) => {
   }
 };
 
+/**
+ * Generates a deterministic, secure hash for comparison (e.g. passport number).
+ * @param {string} i - Sensitive text to hash.
+ * @returns {string} - Hex encoded SHA-256 hash with fixed salt.
+ */
+export const fingerprint = (i) => {
+  if (!i) return null;
+  return crypto
+    .createHmac('sha256', SECRET_SALT)
+    .update(i)
+    .digest('hex');
+};

@@ -8,10 +8,21 @@ const binanceDepositVerificationSchema = new mongoose.Schema({
         required: true,
         index: true
     },
+    userUID: {
+        type: String,
+        required: true,
+        index: true
+    },
     // Reference to the initial 'pending' DEPOSIT transaction created when user submits info
     depositTransactionId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Transaction',
+        required: true,
+        unique: true, // Each verification attempt corresponds to one deposit transaction
+        index: true
+    },
+    depositTransactionUID: {
+        type: String,
         required: true,
         unique: true, // Each verification attempt corresponds to one deposit transaction
         index: true

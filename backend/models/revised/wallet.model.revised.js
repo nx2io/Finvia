@@ -43,7 +43,7 @@ const walletSchema = new mongoose.Schema({
     // Primary currency for the wallet (e.g., USD)
     primaryCurrency: {
         type: String,
-        enum: ['USD', 'SAR', 'EUR'], // Define allowed currencies
+        enum: ['USD'], // Define allowed currencies
         required: true,
         default: 'USD', // Default to USD as per requirement
         immutable: true // Currency usually doesn't change once set

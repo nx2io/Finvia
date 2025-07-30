@@ -54,7 +54,7 @@ const transactionSchema = new mongoose.Schema({
     currency: { // Currency of the amount (should match wallet's primary currency)
         type: String,
         required: true,
-        enum: ['USD', 'SAR', 'EUR']
+        enum: ['USD']
     },
     fee: { // Optional fee associated with the transaction
         type: Number,

@@ -1,15 +1,11 @@
 import mongoose from 'mongoose';
-import SubscriptionPlan from '../models/subscription-plan.model.js';
-import UserSubscription from '../models/user-subscription.model.js';
-import User from '../models/user.model.js';
-import Wallet from '../models/wallet.model.js';
-import Transaction from '../models/transaction.model.js';
+import models from '../models/index.js';
 
 import { SERVER_URL } from '../config/env.js';
 
-import { getOrSetCache, clearCache } from "../utils/cache.js";
+import { getOrSetCache, clearCache } from "../services/utils/cache.js";
 import { workflowClient } from '../config/upstash.js';
-import { convertCurrency } from '../utils/helpres.js';
+import { convertCurrency, generateUniqueTransactionId } from '../services/utils/helpers.js';
 
 // Helper function for atomic balance updates (Consider moving to a shared utility)
 const updateBalance = async (walletId, amount, subWalletId = null, session = null) => {
@@ -26,7 +22,7 @@ const updateBalance = async (walletId, amount, subWalletId = null, session = nul
     }
 
     const options = { new: true, session };
-    const updatedWallet = await Wallet.findOneAndUpdate(filter, update, options);
+    const updatedWallet = await models.Wallet.findOneAndUpdate(filter, update, options);
 
     if (!updatedWallet) {
         throw new Error('Insufficient funds or wallet/sub-wallet not found.');
@@ -43,7 +39,7 @@ export const listAvailablePlans = async (req, res, next) => {
     try {
         // Cache the plans as they don't change often
         const plans = await getOrSetCache('subscriptionPlans', async () => {
-            return await SubscriptionPlan.find({ isActive: true })
+            return await models.SubscriptionPlan.find({ isActive: true })
                 .select('-__v -createdAt -updatedAt')
                 .sort({ price: 1 }); // Sort by price ascending
         }, 3600); // Cache for 1 hour
@@ -65,7 +61,7 @@ export const getMySubscription = async (req, res, next) => {
     try {
         // Cache user's subscription details
         const mySubscription = await getOrSetCache(`mySubscription:${userId}`, async () => {
-            const subscription = await UserSubscription.findOne({ userId: userId, status: 'active' })
+            const subscription = await models.UserSubscription.findOne({ userId: userId, status: 'active' })
                 .populate('planId', '-__v -createdAt -updatedAt') // Populate plan details
                 .select('-__v -userId'); // Exclude unnecessary fields
 
@@ -109,9 +105,9 @@ export const changeSubscription = async (req, res, next) => {
 
     try {
         // 1. Get New Plan, Current Subscription, User, and Wallet
-        const newPlan = await SubscriptionPlan.findOne({ planId: newPlanId, isActive: true }).session(session);
-        const currentSubscription = await UserSubscription.findOne({ userId: userId, status: 'active' }).populate('planId').session(session);
-        const user = await User.findById(userId).populate('mainWalletId').session(session);
+        const newPlan = await models.SubscriptionPlan.findOne({ planId: newPlanId, isActive: true }).session(session);
+        const currentSubscription = await models.UserSubscription.findOne({ userId: userId, status: 'active' }).populate('planId').session(session);
+        const user = await models.User.findById(userId).populate('mainWalletId').session(session);
 
         if (!newPlan) {
             throw new Error('Requested subscription plan not found or is inactive.');
@@ -152,12 +148,16 @@ export const changeSubscription = async (req, res, next) => {
 
 
         // 5. Create Payment Transaction Record
+        
         const now = new Date();
         let paymentTx = null;
         if (cost > 0) {
-            paymentTx = new Transaction({
+            paymentTx = new models.Transaction({
+                TXID: await generateUniqueTransactionId(),
+                userUID: req.user.UUID,
                 userId: userId,
                 walletId: wallet._id,
+                walletNumber: wallet.walletNumber,
                 type: 'SUBSCRIPTION_FEE',
                 status: 'completed',
                 amount: cost,
@@ -269,7 +269,7 @@ export const cancelSubscription = async (req, res, next) => {
     session.startTransaction();
 
     try {
-        const currentSubscription = await UserSubscription.findOne({ userId: userId, status: 'active' })
+        const currentSubscription = await models.UserSubscription.findOne({ userId: userId, status: 'active' })
             .populate('planId')
             .session(session);
 
@@ -292,7 +292,7 @@ export const cancelSubscription = async (req, res, next) => {
         await currentSubscription.save({ session });
 
         // Update User document if needed
-        // const user = await User.findById(userId).session(session);
+        // const user = await models.User.findById(userId).session(session);
         // user.subscription.status = 'pending_cancellation'; // Or just rely on UserSubscription status
         // await user.save({ session });
 

@@ -1,21 +1,18 @@
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 
-import User from '../models/user.model.js';
-import Wallet from '../models/wallet.model.js'; // Import Wallet model
-import SubscriptionPlan from '../models/subscription-plan.model.js'; // Import SubscriptionPlan model
-import UserSubscription from '../models/user-subscription.model.js'; // Import UserSubscription model
+import models from '../models/index.js';
 
-import { generateWalletNumber } from '../utils/helpres.js'; 
-import { generateTokenAndSetCookie } from "../utils/generateTokenAndSetCookie.js";
-import { sendVerificationEmail, sendWelcomeEmail, sendPasswordResetEmail, sendResetSuccessEmail } from "../utils/emails.js";
+import { generateUserId, generateWalletNumber } from '../services/utils/helpers.js'; 
+import { generateTokenAndSetCookie } from "../services/utils/generateTokenAndSetCookie.js";
+import { sendVerificationEmail, sendWelcomeEmail, sendPasswordResetEmail, sendResetSuccessEmail } from "../services/utils/emails.js";
 
 export const signUp = async (req, res, next) => {
   const { fullName, email, password, username, phone, nationality, birthDate } = req.body;
   const clientIp = req.clientIp; // Get IP from request-ip middleware
 
   try {
-    const existingUser = await User.findOne({ $or: [{ email }, { username }] });
+    const existingUser = await models.User.findOne({ $or: [{ email }, { username }] });
     if (existingUser) {
       const field = existingUser.email === email ? 'Email' : 'Username';
       return res.status(409).json({ success: false, message: `${field} already exists` });
@@ -25,7 +22,8 @@ export const signUp = async (req, res, next) => {
     const verificationToken = crypto.randomBytes(3).toString('hex').toUpperCase();
 
     // 1. Create User
-    const user = new User({
+    const user = new models.User({
+      UUID: generateUserId(),
       fullName,
       email,
       username,
@@ -43,7 +41,7 @@ export const signUp = async (req, res, next) => {
 
     // 2. Create Wallet
     const walletNumber = generateWalletNumber();
-    const wallet = new Wallet({
+    const wallet = new models.Wallet({
       userId: user._id,
       walletNumber: walletNumber,
       primaryCurrency: 'USD',
@@ -52,10 +50,10 @@ export const signUp = async (req, res, next) => {
     await wallet.save();
 
     // 3. Assign Free Subscription Plan
-    const freePlan = await SubscriptionPlan.findOne({ planId: 'FREE' });
+    const freePlan = await models.SubscriptionPlan.findOne({ planId: 'FREE' });
     let userSubscription;
     if (freePlan) {
-      userSubscription = new UserSubscription({
+      userSubscription = new models.UserSubscription({
         userId: user._id,
         planId: freePlan._id,
         planDetails: {
@@ -124,7 +122,7 @@ export const signIn = async (req, res, next) => {
   // Validation handled by middleware
 
   try {
-    const user = await User.findOne({ $or: [{ email: loginIdentifier }, { username: loginIdentifier }] }).select('+password');
+    const user = await models.User.findOne({ $or: [{ email: loginIdentifier }, { username: loginIdentifier }] }).select('+password');
 
     if (!user) {
       return res.status(404).json({ success: false, message: 'Invalid credentials' });
@@ -201,20 +199,20 @@ export const googleCallback = async (req, res, next) => {
       return res.status(400).json({ success: false, error: "No email provided by Google" });
     }
 
-    let user = await User.findOne({ email });
+    let user = await models.User.findOne({ email });
 
     if (!user) {
       // New user via Google
       let baseUsername = email.split("@")[0].replace(/[^a-zA-Z0-9_]/g, '');
       let username = baseUsername;
       let counter = 1;
-      while (await User.findOne({ username })) {
+      while (await models.User.findOne({ username })) {
         username = `${baseUsername}${counter}`;
         counter++;
       }
 
       // 1. Create User
-      user = new User({
+      user = new models.User({
         googleId,
         fullName: displayName,
         email: email,
@@ -228,7 +226,7 @@ export const googleCallback = async (req, res, next) => {
 
       // 2. Create Wallet
       const walletNumber = generateWalletNumber();
-      const wallet = new Wallet({
+      const wallet = new models.Wallet({
         userId: user._id,
         walletNumber: walletNumber,
         primaryCurrency: 'USD',
@@ -237,10 +235,10 @@ export const googleCallback = async (req, res, next) => {
       await wallet.save();
 
       // 3. Assign Free Subscription
-      const freePlan = await SubscriptionPlan.findOne({ planId: 'FREE' });
+      const freePlan = await models.SubscriptionPlan.findOne({ planId: 'FREE' });
       let userSubscription;
       if (freePlan) {
-        userSubscription = new UserSubscription({
+        userSubscription = new models.UserSubscription({
           userId: user._id,
           planId: freePlan._id,
           planDetails: { /* ... copy plan details ... */ },
@@ -312,7 +310,7 @@ export const verifyEmail = async (req, res, next) => {
   }
 
   try {
-    const user = await User.findOne({
+    const user = await models.User.findOne({
       emailVerificationToken: verificationCode,
       emailVerificationExpires: { $gt: Date.now() },
     });
@@ -359,7 +357,7 @@ export const resendVerificationEmail = async (req, res, next) => {
   }
 
   try {
-    const user = await User.findOne({ email: email });
+    const user = await models.User.findOne({ email: email });
 
     if (!user) {
       return res.status(200).json({ success: true, message: "If an account with that email exists, a new verification code has been sent." });
@@ -400,7 +398,7 @@ export const forgotPassword = async (req, res, next) => {
   }
 
   try {
-    const user = await User.findOne({ email: email });
+    const user = await models.User.findOne({ email: email });
 
     if (!user) {
       return res.status(200).json({ success: true, message: "If an account with that email exists, a password reset link has been sent." });
@@ -441,7 +439,7 @@ export const resetPassword = async (req, res, next) => {
   try {
     const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
 
-    const user = await User.findOne({
+    const user = await models.User.findOne({
       passwordResetToken: hashedToken,
       passwordResetExpires: { $gt: Date.now() },
     });

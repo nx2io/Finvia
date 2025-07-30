@@ -1,5 +1,5 @@
 import jwt from "jsonwebtoken";
-import { NODE_ENV, JWT_SECRET } from "../config/env.js";
+import { NODE_ENV, JWT_SECRET } from "../../config/env.js";
 
 /**
  * Generates a JWT token including user ID and IP address, and sets it as an HTTP-only cookie.

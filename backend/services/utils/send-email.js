@@ -1,6 +1,6 @@
 import { emailTemplates } from './email-templates.js';
 import dayjs from 'dayjs';
-import { mailtrapClient, sender } from '../config/mailtrap.js'; // مسار صحيح حسب مشروعك
+import { mailtrapClient, sender } from '../../config/mailtrap.js'; // مسار صحيح حسب مشروعك
 
 export const sendReminderEmail = async ({ to, type, subscription }) => {
   if (!to || !type) throw new Error('Missing required parameters');

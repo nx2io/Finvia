@@ -2,8 +2,8 @@ import dayjs from 'dayjs'
 // import { createRequire } from 'module';          // if you use nodejs as a rumtime 
 // const require = createRequire(import.meta.url);  // if you use nodejs as a rumtime 
 const { serve } = require("@upstash/workflow/express");
-import UserSubscription from '../models/user-subscription.model.js';
-import { sendReminderEmail } from '../utils/send-email.js'
+import models from '../models/index.js';
+import { sendReminderEmail } from '../services/utils/send-email.js'
 
 const REMINDERS = [7, 5, 2, 1]
 
@@ -35,7 +35,7 @@ export const sendReminders = serve(async (context) => {
 
 const fetchSubscription = async (context, subscriptionId) => {
   return await context.run('get subscription', async () => {
-    return UserSubscription.findById(subscriptionId).populate('user', 'name email');
+    return models.UserSubscription.findById(subscriptionId).populate('user', 'name email');
   })
 }
 

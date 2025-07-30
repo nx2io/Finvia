@@ -1,0 +1,286 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                       String     @id @default(auto()) @map("_id") @db.ObjectId
+  fullName                 String
+  username                 String     @unique
+  email                    String     @unique
+  phone                    Json?
+  password                 String
+  avatarUrl                String?
+  nationality              String?
+  birthDate                DateTime?
+  kyc                      Json?
+  isKycVerified            Boolean    @default(false)
+  twoFactorAuth            Json?
+  status                   String?
+  emailVerificationToken   String?
+  emailVerificationExpires DateTime?
+  isEmailVerified          Boolean    @default(false)
+  passwordResetToken       String?
+  passwordResetExpires     DateTime?
+  mainWalletId             String?    @db.ObjectId
+  preferences              Json?
+  lastLoginTimestamp       DateTime?
+  ipAddresses              String[]
+  createdAt                DateTime   @default(now())
+  updatedAt                DateTime   @updatedAt
+
+  // Relations
+  bankAccounts             BankAccount[]
+  wallets                  Wallet[]
+  transactionsInitiated    Transaction[] @relation("InitiatedTransactions")
+  transactionsReceived     Transaction[] @relation("ReceivedTransactions")
+  kycRecords               Kyc[]
+  twoFactorAuths           TwoFactorAuth[]
+  subscriptions            UserSubscription[]
+  fundRequestsSent         FundRequest[]  @relation("SentFundRequests")
+  fundRequestsReceived     FundRequest[]  @relation("ReceivedFundRequests")
+  binanceDepositVerifications BinanceDepositVerification[]
+  auditLogs                AuditLog[]
+  idempotencyKeys          IdempotencyKey[]
+  mainWallet               Wallet?     @relation(fields: [mainWalletId], references: [id])
+}
+
+type BankAccount {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  accountHolderName String
+  iban              String
+  bankName          String
+  bankCountry       String
+  swiftCode         String
+  isDefault         Boolean  @default(false)
+  addedAt           DateTime @default(now())
+}
+
+model Wallet {
+  id                      String       @id @default(auto()) @map("_id") @db.ObjectId
+  userId                  String       @db.ObjectId
+  walletNumber            String       @unique
+  primaryCurrency         String
+  mainBalance             Float
+  subWallets              SubWallet[]
+  status                  String
+  statusReason            String?
+  dailyTransactionLimit   Float?
+  monthlyTransactionLimit Float?
+  createdAt               DateTime     @default(now())
+  lastUpdatedAt           DateTime     @updatedAt
+
+  // Relations
+  user                    User         @relation(fields: [userId], references: [id])
+  transactions            Transaction[]
+  transactionEntries      TransactionEntry[]
+}
+
+type SubWallet {
+  id        String   @id @default(auto()) @map("id") @db.ObjectId
+  name      String
+  balance   Float
+  createdAt DateTime @default(now())
+}
+
+model Transaction {
+  id                     String     @id @default(auto()) @map("_id") @db.ObjectId
+  userId                 String     @db.ObjectId
+  walletId               String     @db.ObjectId
+  subWalletId            String?    @db.ObjectId
+  type                   String
+  status                 String
+  amount                 Float
+  currency               String
+  fee                    Float?
+  netAmount              Float?
+  description            String?
+  relatedTransactionId   String?    @db.ObjectId
+  externalReference      String?
+  senderUserId           String?    @db.ObjectId
+  senderWalletId         String?    @db.ObjectId
+  recipientUserId        String?    @db.ObjectId
+  recipientWalletId      String?    @db.ObjectId
+  fundRequestId          String?    @db.ObjectId @unique
+  bankAccountId          String?    @db.ObjectId
+  depositMethod          String?
+  depositDetails         Json?
+  isReversed             Boolean    @default(false)
+  reversalTransactionId  String?    @db.ObjectId
+  initiatedAt            DateTime
+  completedAt            DateTime?
+  failureReason          String?
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
+
+  // Relations
+  user                   User?      @relation(fields: [userId], references: [id])
+  wallet                 Wallet     @relation(fields: [walletId], references: [id])
+  subWallet              SubWallet? @relation(fields: [subWalletId], references: [id])
+  relatedTransaction     Transaction? @relation("RelatedTransactions", fields: [relatedTransactionId], references: [id])
+  senderUser             User?      @relation("SentTransactions", fields: [senderUserId], references: [id])
+  senderWallet           Wallet?    @relation("SentWallets", fields: [senderWalletId], references: [id])
+  recipientUser          User?      @relation("ReceivedTransactions", fields: [recipientUserId], references: [id])
+  recipientWallet        Wallet?    @relation("ReceivedWallets", fields: [recipientWalletId], references: [id])
+  fundRequest            FundRequest? @relation(fields: [fundRequestId], references: [id])
+  binanceDepositVerification BinanceDepositVerification?
+  userSubscription       UserSubscription?
+  transactionEntries     TransactionEntry[]
+}
+
+model SubscriptionPlan {
+  id               String     @id @default(auto()) @map("_id") @db.ObjectId
+  planId           String     @unique
+  name             String
+  description      String?
+  price            Float
+  currency         String
+  billingCycle     String
+  transactionLimits Json?
+  fees             Json?
+  features         String[]
+  isPublic         Boolean    @default(true)
+  isActive         Boolean    @default(true)
+  createdAt        DateTime   @default(now())
+  lastUpdatedAt    DateTime   @updatedAt
+
+  // Relations
+  userSubscriptions UserSubscription[]
+}
+
+model UserSubscription {
+  id                   String     @id @default(auto()) @map("_id") @db.ObjectId
+  userId               String     @db.ObjectId
+  planId               String     @db.ObjectId
+  planDetails          Json?
+  status               String
+  startDate            DateTime
+  endDate              DateTime?
+  paymentTransactionId String?    @db.ObjectId
+  autoRenew            Boolean    @default(true)
+  cancellationReason   String?
+  cancelledAt          DateTime?
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+
+  // Relations
+  user                 User       @relation(fields: [userId], references: [id])
+  plan                 SubscriptionPlan @relation(fields: [planId], references: [id])
+  paymentTransaction   Transaction? @relation(fields: [paymentTransactionId], references: [id])
+}
+
+model FundRequest {
+  id                      String     @id @default(auto()) @map("_id") @db.ObjectId
+  requesterUserId         String     @db.ObjectId
+  requesterWalletId       String     @db.ObjectId
+  requestedUserId         String     @db.ObjectId
+  amount                  Float
+  currency                String
+  status                  String
+  note                    String?
+  fulfillmentTransactionId String?    @db.ObjectId @unique
+  rejectionReason         String?
+  expiresAt               DateTime?
+  requestedAt             DateTime   @default(now())
+  lastUpdatedAt           DateTime   @updatedAt
+
+  // Relations
+  requesterUser           User       @relation("SentFundRequests", fields: [requesterUserId], references: [id])
+  requesterWallet         Wallet     @relation(fields: [requesterWalletId], references: [id])
+  requestedUser           User       @relation("ReceivedFundRequests", fields: [requestedUserId], references: [id])
+  fulfillmentTransaction  Transaction? @relation(fields: [fulfillmentTransactionId], references: [id])
+}
+
+model BinanceDepositVerification {
+  id                   String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId               String   @db.ObjectId
+  depositTransactionId String   @db.ObjectId @unique
+  userProvidedInfo     Json?
+  status               String
+  apiResponseData      Json?
+  failureReason        String?
+  createdAt            DateTime @default(now())
+  lastCheckedAt        DateTime?
+  verifiedAt           DateTime?
+
+  // Relations
+  user                 User     @relation(fields: [userId], references: [id])
+  depositTransaction   Transaction @relation(fields: [depositTransactionId], references: [id])
+}
+
+model AuditLog {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId       String   @db.ObjectId
+  action       String
+  actorType    String   // user | admin | system
+  resourceType String
+  resourceId   Json     // Could be String or ObjectId
+  changes      Json?    // { before, after }
+  ipAddress    String?
+  userAgent    String?
+  location     String?
+  timestamp    DateTime @default(now())
+
+  // Relations
+  user         User?    @relation(fields: [userId], references: [id])
+}
+
+model IdempotencyKey {
+  id               String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId           String   @db.ObjectId
+  key              String   @unique
+  endpoint         String
+  payloadHash      String
+  responseSnapshot Json?
+  status           String   // success | failed
+  createdAt        DateTime @default(now())
+  expiresAt        DateTime
+
+  // Relations
+  user             User     @relation(fields: [userId], references: [id])
+}
+
+model TransactionEntry {
+  id             String   @id @default(auto()) @map("_id") @db.ObjectId
+  transactionId  String   @db.ObjectId
+  walletId       String   @db.ObjectId
+  subWalletId    String?  @db.ObjectId
+  entryType      String   // credit | debit
+  amount         Float
+  currency       String
+  createdAt      DateTime @default(now())
+
+  // Relations
+  transaction    Transaction @relation(fields: [transactionId], references: [id])
+  wallet         Wallet     @relation(fields: [walletId], references: [id])
+  subWallet      SubWallet? @relation(fields: [subWalletId], references: [id])
+}
+
+// Models for embedded relationships
+model Kyc {
+  id      String @id @default(auto()) @map("_id") @db.ObjectId
+  userId  String @db.ObjectId
+  // Add KYC-specific fields here
+  
+  user    User   @relation(fields: [userId], references: [id])
+}
+
+model TwoFactorAuth {
+  id     String @id @default(auto()) @map("_id") @db.ObjectId
+  userId String @db.ObjectId
+  // Add 2FA-specific fields here
+  
+  user   User   @relation(fields: [userId], references: [id])
+}
+

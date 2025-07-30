@@ -80,7 +80,7 @@ userRouter.post('/2fa/enable/initiate', initiateEnableTwoFactor); // No input va
 // POST /v1/users/2fa/enable/verify
 // Basic validation for the TOTP code
 userRouter.post('/2fa/enable/verify', [
-    body('token').notEmpty().withMessage('2FA token is required').isLength({ min: 6, max: 6 }).isNumeric().withMessage('Token must be a 6-digit number')
+    body('code').notEmpty().withMessage('2FA token is required').isLength({ min: 6, max: 6 }).isNumeric().withMessage('Token must be a 6-digit number')
 ], handleValidationErrors, verifyEnableTwoFactor);
 
 // POST /v1/users/2fa/disable

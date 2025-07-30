@@ -1,8 +1,11 @@
-import User from '../models/user.model.js';
-import Wallet from '../models/wallet.model.js'; // Needed for populating wallet info
-import { getOrSetCache, clearCache } from "../utils/cache.js";
+import models from '../models/index.js';
+
+import { authenticator } from 'otplib';
+import qrcode from 'qrcode';
+
+import { getOrSetCache, clearCache } from "../services/utils/cache.js";
 import validator from 'validator'; // For bank account validation
-import { decrypt } from '../utils/encryption.js';
+import { decrypt, encrypt } from '../services/utils/encryption.js';
 
 // --- Profile Management ---
 
@@ -20,7 +23,7 @@ export const getMyProfile = async (req, res, next) => {
     const userProfile = await getOrSetCache(`userProfile:${userId}`, async () => {
       // Populate related data: main wallet and current subscription details
       // Select fields to exclude sensitive data like password, tokens etc.
-      return await User.findById(userId)
+      return await models.User.findById(userId)
         .select('-password -emailVerificationToken -emailVerificationExpires -passwordResetToken -passwordResetExpires -__v -ipAddresses')
         .populate('mainWalletId', 'walletNumber primaryCurrency mainBalance status') // Populate basic wallet info
         // Populate subscription details if needed (consider performance)
@@ -61,7 +64,7 @@ export const updateMyProfile = async (req, res, next) => {
   }
 
   try {
-    const updatedUser = await User.findByIdAndUpdate(userId, { $set: updateData }, { new: true, runValidators: true })
+    const updatedUser = await models.User.findByIdAndUpdate(userId, { $set: updateData }, { new: true, runValidators: true })
       .select('-password -emailVerificationToken -emailVerificationExpires -passwordResetToken -passwordResetExpires -__v -ipAddresses');
 
     if (!updatedUser) {
@@ -99,7 +102,7 @@ export const submitKyc = async (req, res, next) => {
   }
 
   try {
-    const user = await User.findById(userId);
+    const user = await models.User.findById(userId);
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
@@ -147,7 +150,7 @@ export const submitKyc = async (req, res, next) => {
 export const getKycStatus = async (req, res, next) => {
   const userId = req.user._id;
   try {
-    const user = await User.findById(userId).select('kyc isKycVerified');
+    const user = await models.User.findById(userId).select('kyc isKycVerified');
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
@@ -189,7 +192,7 @@ export const addBankAccount = async (req, res, next) => {
   // }
 
   try {
-    const user = await User.findById(userId);
+    const user = await models.User.findById(userId);
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
@@ -244,7 +247,7 @@ export const addBankAccount = async (req, res, next) => {
 export const listBankAccounts = async (req, res, next) => {
   const userId = req.user._id;
   try {
-    const user = await User.findById(userId).select('bankAccounts');
+    const user = await models.User.findById(userId).select('bankAccounts');
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
@@ -272,7 +275,7 @@ export const deleteBankAccount = async (req, res, next) => {
   }
 
   try {
-    const user = await User.findById(userId);
+    const user = await models.User.findById(userId);
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
@@ -316,7 +319,7 @@ export const setDefaultBankAccount = async (req, res, next) => {
     }
 
     try {
-        const user = await User.findById(userId);
+        const user = await models.User.findById(userId);
         if (!user) {
             return res.status(404).json({ success: false, message: 'User not found' });
         }
@@ -356,17 +359,20 @@ export const setDefaultBankAccount = async (req, res, next) => {
  * @access Private
  */
 export const getTwoFactorStatus = async (req, res, next) => {
-    const userId = req.user._id;
-    try {
-        const user = await User.findById(userId).select('twoFactorAuth');
-        if (!user) {
-            return res.status(404).json({ success: false, message: 'User not found' });
-        }
-        res.status(200).json({ success: true, data: { isEnabled: user.twoFactorAuth?.isEnabled || false, method: user.twoFactorAuth?.method } });
-    } catch (error) {
-        console.error("Get 2FA Status Error:", error);
-        next(error);
-    }
+  try {
+    const user = await models.User.findById(req.user._id).select('twoFactorAuth');
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        isEnabled: user.twoFactorAuth?.isEnabled || false,
+        method: user.twoFactorAuth?.method || null,
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
 };
 
 /**
@@ -375,12 +381,36 @@ export const getTwoFactorStatus = async (req, res, next) => {
  * @access Private
  */
 export const initiateEnableTwoFactor = async (req, res, next) => {
-    // 1. Check if already enabled
-    // 2. Generate TOTP secret using otplib
-    // 3. Store secret temporarily (e.g., in user doc, marked as unverified)
-    // 4. Generate QR code data (otpauth:// URL)
-    // 5. Return QR code data and secret (for manual entry) to user
-    res.status(501).json({ success: false, message: 'Not Implemented Yet' });
+  try {
+    const user = await models.User.findById(req.user._id).select('twoFactorAuth');
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    if (user.twoFactorAuth?.isEnabled) {
+      return res.status(400).json({ success: false, message: '2FA is already enabled' });
+    }
+
+    const secret = authenticator.generateSecret();
+    const otpauth = authenticator.keyuri(req.user.email, 'Finvia', secret);
+    const qrDataURL = await qrcode.toDataURL(otpauth);
+
+    // حفظ secret مؤقتًا بدون تمكين 2FA
+    user.twoFactorAuth = {
+      isEnabled: false,
+      secret: secret,
+      method: 'authenticator_app',
+    };
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      data: {
+        qrCode: qrDataURL,
+        secret, // يُفضل إظهار هذا فقط أثناء التفعيل الأولي
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
 };
 
 /**
@@ -389,12 +419,28 @@ export const initiateEnableTwoFactor = async (req, res, next) => {
  * @access Private
  */
 export const verifyEnableTwoFactor = async (req, res, next) => {
-    // 1. Get user and temporary secret
-    // 2. Get TOTP code from request body
-    // 3. Verify code using otplib and the stored secret
-    // 4. If valid: Mark 2FA as enabled, store encrypted secret permanently
-    // 5. If invalid: Return error
-    res.status(501).json({ success: false, message: 'Not Implemented Yet' });
+  const { code } = req.body;
+
+  if (!code) return res.status(400).json({ success: false, message: '2FA code is required' });
+
+  try {
+    const user = await models.User.findById(req.user._id).select('twoFactorAuth');
+    if (!user?.twoFactorAuth?.secret) return res.status(400).json({ success: false, message: '2FA not initiated' });
+
+    const secret = decrypt(user.twoFactorAuth.secret);
+    const isValid = authenticator.check(code, secret);
+
+    if (!isValid) {
+      return res.status(400).json({ success: false, message: 'Invalid 2FA code' });
+    }
+
+    user.twoFactorAuth.isEnabled = true;
+    await user.save();
+
+    res.status(200).json({ success: true, message: '2FA has been enabled successfully' });
+  } catch (err) {
+    next(err);
+  }
 };
 
 /**
@@ -403,10 +449,31 @@ export const verifyEnableTwoFactor = async (req, res, next) => {
  * @access Private
  */
 export const disableTwoFactor = async (req, res, next) => {
-    // 1. Verify user identity (e.g., require password or current 2FA code)
-    // 2. Find user
-    // 3. Update user doc to disable 2FA, clear secret
-    res.status(501).json({ success: false, message: 'Not Implemented Yet' });
+  const { code } = req.body;
+
+  if (!code) return res.status(400).json({ success: false, message: '2FA code is required' });
+
+  try {
+    const user = await models.User.findById(req.user._id).select('twoFactorAuth');
+
+    if (!user?.twoFactorAuth?.isEnabled) {
+      return res.status(400).json({ success: false, message: '2FA is not enabled' });
+    }
+
+    const secret = decrypt(user.twoFactorAuth.secret);
+    const isValid = authenticator.check(code, secret);
+
+    if (!isValid) {
+      return res.status(400).json({ success: false, message: 'Invalid 2FA code' });
+    }
+
+    user.twoFactorAuth = { isEnabled: false, secret: null, method: null };
+    await user.save();
+
+    res.status(200).json({ success: true, message: '2FA has been disabled' });
+  } catch (err) {
+    next(err);
+  }
 };
 
 // --- User Search ---
@@ -428,7 +495,7 @@ export const searchUsers = async (req, res, next) => {
         // Search by username or email, case-insensitive
         // Exclude the current user from results
         // Limit results for performance
-        const users = await User.find({
+        const users = await models.User.find({
             _id: { $ne: currentUserId }, // Exclude self
             $or: [
                 { username: { $regex: query, $options: 'i' } },
@@ -460,7 +527,7 @@ export const getUserById = async (req, res, next) => {
   const userId = req.params.id;
   try {
     const user = await getOrSetCache(`user:${userId}`, async () => {
-      return await User.findById(userId).select("-password -__v");
+      return await models.User.findById(userId).select("-password -__v");
     }, 60);
 
     if (!user) {
@@ -482,7 +549,7 @@ export const listAllUsers = async (req, res, next) => {
     // SECURITY: Add Admin authorization middleware
     try {
         // Add pagination later
-        const users = await User.find().select('-password -__v');
+        const users = await models.User.find().select('-password -__v');
         res.status(200).json({ success: true, count: users.length, data: users });
     } catch (error) {
         console.error("List All Users Error:", error);

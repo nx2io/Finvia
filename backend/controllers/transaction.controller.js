@@ -1,47 +1,11 @@
 import mongoose from 'mongoose';
-import Transaction from '../models/transaction.model.js';
-import Wallet from '../models/wallet.model.js';
-import User from '../models/user.model.js';
-import FundRequest from '../models/fund-request.model.js';
-import UserSubscription from '../models/user-subscription.model.js';
+import models from '../models/index.js';
 // import SubscriptionPlan from '../models/subscription-plan.model.js';
-import { clearCache } from "../utils/cache.js";
 
-// Helper function for atomic balance updates (Consider moving to a shared utility)
-const updateBalance = async (walletId, amount, subWalletId = null, session = null) => {
-    const update = {};
-    const filter = { _id: walletId };
+import { transactionQueue } from '../config/queues.js';
+import { clearCache } from "../services/utils/cache.js";
+import { convertCurrency, generateUniqueTransactionId, updateBalance, getUserPlanDetails } from '../services/utils/helpers.js';
 
-    if (subWalletId) {
-        filter['subWallets._id'] = subWalletId;
-        if (amount < 0) filter['subWallets.$.balance'] = { $gte: Math.abs(amount) };
-        update['$inc'] = { 'subWallets.$.balance': amount };
-    } else {
-        if (amount < 0) filter.mainBalance = { $gte: Math.abs(amount) };
-        update['$inc'] = { mainBalance: amount };
-    }
-
-    const options = { new: true, session };
-    const updatedWallet = await Wallet.findOneAndUpdate(filter, update, options);
-
-    if (!updatedWallet) {
-        throw new Error('Insufficient funds or wallet/sub-wallet not found.');
-    }
-    return updatedWallet;
-};
-
-// Helper to get user's current subscription plan details (fees, limits)
-const getUserPlanDetails = async (userId, session = null) => {
-    const userSub = await UserSubscription.findOne({ userId, status: 'active' })
-        .populate('planId')
-        .session(session);
-    if (!userSub || !userSub.planId) {
-        console.warn(`Active subscription plan not found for user ${userId}. Using defaults.`);
-        // Return default limits/fees if no plan found (or throw error)
-        return { fees: { p2pTransferFeePercent: 0, withdrawalFeePercent: 1.5, withdrawalFeeFixed: 0.5 }, transactionLimits: { maxSingleTransaction: 500 } }; // Example defaults
-    }
-    return userSub.planId; // Return the populated plan document
-};
 
 /**
  * @description Get transaction history for the authenticated user
@@ -68,9 +32,9 @@ export const getTransactionHistory = async (req, res, next) => {
     };
 
     try {
-        const transactions = await Transaction.find(query, null, options)
+        const transactions = await models.Transaction.find(query, null, options)
             .select('-__v -updatedAt').populate("walletId"); // Exclude fields
-        const totalTransactions = await Transaction.countDocuments(query);
+        const totalTransactions = await models.Transaction.countDocuments(query);
 
         res.status(200).json({
             success: true,
@@ -82,7 +46,7 @@ export const getTransactionHistory = async (req, res, next) => {
             }
         });
     } catch (error) {
-        console.error("Get Transaction History Error:", error);
+        console.error("Get models.Transaction History Error:", error);
         next(error);
     }
 };
@@ -97,7 +61,7 @@ export const getTransactionDetails = async (req, res, next) => {
     const transactionId = req.params.transactionId;
 
     try {
-        const transaction = await Transaction.findOne({ _id: transactionId, userId: userId })
+        const transaction = await models.Transaction.findOne({ _id: transactionId, userId: userId })
             .select('-__v -updatedAt')
             .populate('senderUserId', 'username fullName avatarUrl') // Populate related users if P2P
             .populate('recipientUserId', 'username fullName avatarUrl');
@@ -108,7 +72,7 @@ export const getTransactionDetails = async (req, res, next) => {
 
         res.status(200).json({ success: true, data: transaction });
     } catch (error) {
-        console.error("Get Transaction Details Error:", error);
+        console.error("Get models.Transaction Details Error:", error);
         next(error);
     }
 };
@@ -119,113 +83,60 @@ export const getTransactionDetails = async (req, res, next) => {
  * @access Private
  */
 export const sendP2PTransfer = async (req, res, next) => {
-    // SECURITY: Add input validation middleware
     const senderUserId = req.user._id;
-    const { recipientIdentifier, amount, currency, note } = req.body; // recipientIdentifier can be username or email
+    const { recipientIdentifier, amount, currency, note } = req.body;
 
     if (!recipientIdentifier || !amount || amount <= 0 || !currency) {
         return res.status(400).json({ success: false, message: 'Recipient, amount, and currency are required' });
     }
 
-    const session = await mongoose.startSession();
-    session.startTransaction();
-
     try {
-        // 1. Find Sender and Recipient Users/Wallets
-        const sender = await User.findById(senderUserId).populate('mainWalletId').session(session);
-        const recipient = await User.findOne({ $or: [{ email: recipientIdentifier }, { username: recipientIdentifier }] })
-            .populate('mainWalletId').session(session);
-
-        if (!sender || !sender.mainWalletId) {
-            throw new Error('Sender wallet not found.');
-        }
-        if (!recipient || !recipient.mainWalletId) {
-            throw new Error('Recipient user or wallet not found.');
-        }
-        if (senderUserId === recipient._id.toString()) {
-            throw new Error('Cannot send funds to yourself.');
-        }
-
-        const senderWallet = sender.mainWalletId;
-        const recipientWallet = recipient.mainWalletId;
-
-        // 2. Validate Currency
-        if (currency !== senderWallet.primaryCurrency || currency !== recipientWallet.primaryCurrency) {
-            throw new Error(`Invalid currency. Sender/Recipient wallet currency mismatch or unsupported.`);
-        }
-
-        // 3. Check Limits and Fees (P2P fees are 0 based on requirements)
-        const planDetails = await getUserPlanDetails(senderUserId, session);
-        if (amount > planDetails.transactionLimits.maxSingleTransaction) {
-            throw new Error(`Transaction amount exceeds the limit of ${planDetails.transactionLimits.maxSingleTransaction} ${currency}.`);
-        }
-        // Add daily/monthly volume checks here if needed
-
-        const fee = 0; // P2P is free
-        const totalDebit = amount + fee;
-
-        // 4. Perform Atomic Balance Updates
-        await updateBalance(senderWallet._id, -totalDebit, null, session);
-        await updateBalance(recipientWallet._id, amount, null, session);
-
-        // 5. Create Transaction Records
-        const now = new Date();
-        const senderTx = new Transaction({
-            userId: senderUserId,
-            walletId: senderWallet._id,
-            type: 'P2P_SEND',
-            status: 'completed',
-            amount: amount,
-            currency: currency,
-            fee: fee,
-            netAmount: -totalDebit, // Net change for sender
-            description: note || `Sent to ${recipient.username}`,
-            recipientUserId: recipient._id,
-            recipientWalletId: recipientWallet._id,
-            initiatedAt: now,
-            completedAt: now,
+        console.log('🔄 Enqueueing P2P transfer:', {
+            senderUserId,
+            recipientIdentifier,
+            amount,
+            currency
         });
-        await senderTx.save({ session });
 
-        const recipientTx = new Transaction({
-            userId: recipient._id,
-            walletId: recipientWallet._id,
-            type: 'P2P_RECEIVE',
-            status: 'completed',
-            amount: amount,
-            currency: currency,
-            fee: 0,
-            netAmount: amount, // Net change for recipient
-            description: note || `Received from ${sender.username}`,
-            senderUserId: senderUserId,
-            senderWalletId: senderWallet._id,
-            relatedTransactionId: senderTx._id, // Link to sender's transaction
-            initiatedAt: now,
-            completedAt: now,
+        // Format the job data
+        const jobData = {
+            type: 'P2P_TRANSFER',
+            data: {
+                TXID: await generateUniqueTransactionId(),
+                senderUserId: senderUserId.toString(),
+                recipientIdentifier,
+                amount: parseFloat(amount),
+                currency,
+                note: note || ''
+            }
+        };
+
+        // Add job to queue with retry options
+        const job = await transactionQueue.add('p2p-transfer', jobData, {
+            jobId: `p2p-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            attempts: 5,
+            backoff: {
+                type: 'exponential',
+                delay: 10000
+            },
+            removeOnComplete: { // الاحتفاظ بآخر 1000 مهمة مكتملة
+                // count: 1000000000, // عدد المهام المكتملة المحتفظ بها
+                age: 7 * 24 * 3600 // الاحتفاظ بالمهام لمدة 7 أيام (بالثواني)
+            },
+            removeOnFail: {
+                age: 30 * 24 * 3600, 
+            }
         });
-        await recipientTx.save({ session });
 
-        // Update senderTx with related ID
-        senderTx.relatedTransactionId = recipientTx._id;
-        await senderTx.save({ session });
+        console.log('✅ Transfer enqueued successfully:', { jobId: job.id });
 
-        // 6. Commit Transaction
-        await session.commitTransaction();
-        session.endSession();
-
-        // 7. Clear Cache & Notify (Notification is out of scope here)
-        await clearCache(`walletDetails:${senderUserId}`);
-        await clearCache(`walletDetails:${recipient._id}`);
-        // Clear transaction history caches
-
-        res.status(200).json({ success: true, message: 'Transfer successful', data: { transactionId: senderTx._id } });
-
+        res.status(200).json({ 
+            success: true, 
+            message: 'Transfer enqueued successfully',
+            data: { jobId: job.id }
+        });
     } catch (error) {
-        if (session.inTransaction()) {
-            await session.abortTransaction();
-        }
-        session.endSession();
-        console.error("P2P Transfer Error:", error);
+        console.error('❌ Queue error:', error);
         if (error.message.includes('Insufficient funds')) {
             return res.status(400).json({ success: false, message: 'Insufficient funds.' });
         }
@@ -247,9 +158,9 @@ export const sendP2PTransfer = async (req, res, next) => {
 export const requestFunds = async (req, res, next) => {
     // SECURITY: Add input validation middleware
     const requesterUserId = req.user._id;
-    const { requestedUserIdentifier, amount, currency, note, expiresDays = 7 } = req.body;
+    const { recipientIdentifier, amount, currency, note, expiresDays = 7 } = req.body;
 
-    if (!requestedUserIdentifier || !amount || amount <= 0 || !currency) {
+    if (!recipientIdentifier || !amount || amount <= 0 || !currency) {
         return res.status(400).json({ success: false, message: 'Requested user, amount, and currency are required' });
     }
 
@@ -257,35 +168,50 @@ export const requestFunds = async (req, res, next) => {
     session.startTransaction();
 
     try {
-        const requester = await User.findById(requesterUserId).populate('mainWalletId').session(session);
-        const requestedUser = await User.findOne({ $or: [{ email: requestedUserIdentifier }, { username: requestedUserIdentifier }] })
-            .session(session);
+        const requester = await models.User.findById(requesterUserId).populate('mainWalletId').session(session);
+        const requested = await models.User.findOne({ $or: [{ email: recipientIdentifier }, { username: recipientIdentifier }] }).populate('mainWalletId').session(session);
 
         if (!requester || !requester.mainWalletId) {
             throw new Error('Requester wallet not found.');
         }
-        if (!requestedUser) {
+        if (!requested) {
             throw new Error('Requested user not found.');
         }
-        if (requesterUserId === requestedUser._id.toString()) {
+        if (requesterUserId === requested._id.toString()) {
             throw new Error('Cannot request funds from yourself.');
         }
-
-        // Validate currency against requester's wallet
-        if (currency !== requester.mainWalletId.primaryCurrency) {
-            throw new Error(`Invalid currency. Your wallet currency is ${requester.mainWalletId.primaryCurrency}`);
+        if (requester._id.toString() === requested._id.toString()) {
+            throw new Error('Cannot request funds from yourself.');
         }
+        const requesterWallet = requester.mainWalletId;
+        const requestedWallet = requested.mainWalletId;
+
+        let amountInUSD = await convertCurrency(amount, requesterWallet.primaryCurrency, 'USD');
+        let feeInRequesterCurrency = await convertCurrency(0.20, 'USD', requesterWallet.primaryCurrency);
+        let requesterAmount = await convertCurrency(amount, currency, requesterWallet.primaryCurrency);
+        let requestedAmount = await convertCurrency(amount, currency, requestedWallet.primaryCurrency);
+
+        const planDetails = await getUserPlanDetails(requesterUserId, session);
+        if (amountInUSD > planDetails.transactionLimits.maxSingleTransaction) {
+            throw new Error(`Transaction amount exceeds the limit of ${planDetails.transactionLimits.maxSingleTransaction} ${requestedWallet.primaryCurrency}.`);
+        }
+
+        const totalCredit = requesterAmount - feeInRequesterCurrency;
 
         // Create FundRequest document
         const expiresAt = new Date();
         expiresAt.setDate(expiresAt.getDate() + parseInt(expiresDays));
 
-        const fundRequest = new FundRequest({
+        const fundRequest = new models.FundRequest({
+            REID: await generateUniqueTransactionId(),
+            requesterUserUID: req.user.UUID,
             requesterUserId: requesterUserId,
-            requesterWalletId: requester.mainWalletId._id,
-            requestedUserId: requestedUser._id,
-            amount: amount,
-            currency: currency,
+            requesterWalletId: requester.mainWalletId?._id,
+            requesterWalletNumber: requester.mainWalletId?.walletNumber,
+            requestedUserId: requested._id,
+            requestedUserUID: requested.UUID,
+            amount: requesterAmount,
+            currency: requesterWallet.primaryCurrency,
             status: 'pending',
             note: note,
             expiresAt: expiresAt,
@@ -293,31 +219,52 @@ export const requestFunds = async (req, res, next) => {
         await fundRequest.save({ session });
 
         // Create placeholder transactions (optional, but good for history view)
+        
         const now = new Date();
-        const requesterTx = new Transaction({
-            userId: requesterUserId,
+        const requesterTx = new models.Transaction({
+            TXID: await generateUniqueTransactionId(),
+            userUID: req.user.UUID,
+            userId: requester._id,
             walletId: requester.mainWalletId._id,
+            walletNumber: requester.mainWalletId.walletNumber,
             type: 'P2P_REQUEST_SEND',
             status: 'requested',
-            amount: amount,
-            currency: currency,
-            description: `Requested from ${requestedUser.username}`,
-            recipientUserId: requestedUser._id,
+            amount: requesterAmount,
+            currency: requesterWallet.primaryCurrency,
+            fee: feeInRequesterCurrency,
+            netAmount: totalCredit,
+            description: `You requested ${amount}${currency} ≈ (${requesterAmount}${requesterWallet.primaryCurrency}), from @${requested.username}`,
+            recipientUserId: requested._id,
+            recipientUserUID: requested.UUID,
+            recipientWalletId: requested.mainWalletId._id,
+            recipientWalletNumber: requested.mainWalletId.walletNumber,
             fundRequestId: fundRequest._id,
+            fundRequestUID: fundRequest.REID,
             initiatedAt: now,
         });
         await requesterTx.save({ session });
 
-        const requestedUserTx = new Transaction({
-            userId: requestedUser._id,
-            // walletId: requestedUser.mainWalletId?._id, // Wallet ID might not be needed here yet
+        const requestedUserTx = new models.Transaction({
+            TXID: await generateUniqueTransactionId(),
+            userUID: requested.UUID,
+            userId: requested._id,
+            walletId: requested.mainWalletId._id, // Wallet ID might not be needed here yet
+            walletNumber: requested.mainWalletId.walletNumber,
             type: 'P2P_REQUEST_RECEIVE',
             status: 'requested',
-            amount: amount,
-            currency: currency,
-            description: `Request from ${requester.username}`,
-            senderUserId: requesterUserId,
+            amount: requestedAmount,
+            currency: requestedWallet.primaryCurrency,
+            fee: 0,
+            netAmount: requestedAmount,
+            description: `@${requester.username} requested ${amount} ${currency} ≈ (${requestedAmount}${requestedWallet.primaryCurrency}), from you`,
+            senderUserId: req.user._id,
+            senderUserUID: req.user.UUID,
+            senderWalletId: requester.mainWalletId._id,
+            senderWalletNumber: requester.mainWalletId.walletNumber,
+            recipientUserId: requested._id,
+            recipientUserUID: requested.UUID,
             fundRequestId: fundRequest._id,
+            fundRequestUID: fundRequest.REID,
             initiatedAt: now,
         });
         await requestedUserTx.save({ session });
@@ -350,7 +297,7 @@ export const requestFunds = async (req, res, next) => {
 export const listReceivedFundRequests = async (req, res, next) => {
     const userId = req.user._id;
     try {
-        const requests = await FundRequest.find({ requestedUserId: userId, status: 'pending' })
+        const requests = await models.FundRequest.find({ requestedUserId: userId, status: 'pending' })
             .populate('requesterUserId', 'username fullName avatarUrl')
             .sort({ requestedAt: -1 });
 
@@ -369,7 +316,7 @@ export const listReceivedFundRequests = async (req, res, next) => {
 export const listSentFundRequests = async (req, res, next) => {
     const userId = req.user._id;
     try {
-        const requests = await FundRequest.find({ requesterUserId: userId })
+        const requests = await models.FundRequest.find({ requesterUserId: userId })
             .populate('requestedUserId', 'username fullName avatarUrl')
             .sort({ requestedAt: -1 });
 
@@ -389,7 +336,7 @@ export const respondToFundRequest = async (req, res, next) => {
     // SECURITY: Add input validation middleware
     const userId = req.user._id;
     const requestId = req.params.requestId;
-    const { action, reason } = req.body; // action: 'accept' or 'reject'
+    const { action } = req.body; // action: 'accept' or 'reject'
 
     if (!requestId || !action || !['accept', 'reject'].includes(action)) {
         return res.status(400).json({ success: false, message: 'Request ID and valid action (accept/reject) are required' });
@@ -399,36 +346,131 @@ export const respondToFundRequest = async (req, res, next) => {
     session.startTransaction();
 
     try {
-        const fundRequest = await FundRequest.findById(requestId).session(session);
+        const fundRequest = await models.FundRequest.findById(requestId).session(session);
+        const requesterTX = await models.Transaction.findOne({ userUID: fundRequest.requesterUserUID }).session(session);
+        const requestedTX = await models.Transaction.findOne({ userUID: fundRequest.requestedUserUID }).session(session);
+        const requester = await models.User.findById(fundRequest.requesterUserId).populate('mainWalletId').session(session);
+        const requested = await models.User.findById(fundRequest.requestedUserId).populate('mainWalletId').session(session);
 
         if (!fundRequest) {
             throw new Error('Fund request not found.');
         }
-        if (fundRequest.requestedUserId.toString() !== userId) {
+        if (fundRequest.requestedUserId.toString() !== userId.toString()) {
             throw new Error('You are not authorized to respond to this request.');
         }
-        if (fundRequest.status !== 'pending') {
-            throw new Error(`Cannot respond to a request with status '${fundRequest.status}'.`);
-        }
+
         if (fundRequest.expiresAt && fundRequest.expiresAt < new Date()) {
-             // Update status to expired first
-             fundRequest.status = 'expired';
-             await fundRequest.save({ session });
-             // Update related transactions
-             await Transaction.updateMany({ fundRequestId: requestId, status: 'requested' }, { $set: { status: 'expired' } }).session(session);
-             throw new Error('This fund request has expired.');
+            fundRequest.status = 'expired',
+            await fundRequest.save({ session });
+
+            // Create placeholder transactions (optional, but good for history view)            
+            const now = new Date();
+            const requesterTx = new models.Transaction({
+                TXID: await generateUniqueTransactionId(),
+                userUID: requesterTX.userUID,
+                userId: requesterTX.userId,
+                walletId: requesterTX.walletId,
+                walletNumber: requesterTX.walletNumber,
+                type: 'P2P_REQUEST_SEND',
+                status: 'rejected',
+                amount: requesterTX.amount,
+                currency: requesterTX.currency,
+                fee: requesterTX.fee,
+                netAmount: requesterTX.netAmount,
+                description: `The request has been rejected. Reason: expired`,
+                recipientUserId: requesterTX.recipientUserId,
+                recipientUserUID: requesterTX.recipientUserUID,
+                recipientWalletId: requesterTX.recipientWalletId,
+                recipientWalletNumber: requesterTX.recipientWalletNumber,
+                fundRequestId: requesterTX.fundRequestId,
+                fundRequestUID: requesterTX.fundRequestUID,
+                initiatedAt: now,
+            });
+            await requesterTx.save({ session });
+
+            const requestedUserTx = new models.Transaction({
+                TXID: await generateUniqueTransactionId(),
+                userUID: requestedTX.userUID,
+                userId: requestedTX.userId,
+                walletId: requestedTX.walletId, // Wallet ID might not be needed here yet
+                walletNumber: requestedTX.walletNumber,
+                type: 'P2P_REQUEST_RECEIVE',
+                status: 'rejected',
+                amount: requestedTX.amount,
+                currency: requestedTX.currency,
+                fee: requestedTX.fee,
+                netAmount: requestedTX.netAmount,
+                description: `The request has been rejected. Reason: expired`,
+                senderUserId: requestedTX.senderUserId,
+                senderUserUID: requestedTX.senderUserUID,
+                senderWalletId: requestedTX.senderWalletId,
+                senderWalletNumber: requestedTX.senderWalletNumber,
+                recipientUserId: requestedTX.recipientUserId,
+                recipientUserUID: requestedTX.recipientUserUID,
+                fundRequestId: requestedTX.fundRequestId,
+                fundRequestUID: requestedTX.fundRequestUID,
+                initiatedAt: now,
+            });
+            await requestedUserTx.save({ session });
+             
+            throw new Error('This fund request has expired.');
         }
 
         // Update FundRequest status
-        fundRequest.status = action === 'accept' ? 'accepted' : 'rejected';
         if (action === 'reject') {
-            fundRequest.rejectionReason = reason;
-        }
-        await fundRequest.save({ session });
+            fundRequest.status = 'rejected',
+            await fundRequest.save({ session });
 
-        // Update related Transaction statuses
-        const newTxStatus = action === 'accept' ? 'pending' : 'rejected'; // 'pending' for accepted, waiting for fulfillment
-        await Transaction.updateMany({ fundRequestId: requestId, status: 'requested' }, { $set: { status: newTxStatus } }).session(session);
+            // Update related models.Transaction statuses
+            const now = new Date();
+            const requesterTx = new models.Transaction({
+                TXID: await generateUniqueTransactionId(),
+                userUID: requesterTX.userUID,
+                userId: requesterTX.userId,
+                walletId: requesterTX.walletId,
+                walletNumber: requesterTX.walletNumber,
+                type: 'P2P_REQUEST_SEND',
+                status: 'rejected',
+                amount: requesterTX.amount,
+                currency: requesterTX.currency,
+                description: `The request has been rejected by ${requested.fullName}.`,
+                recipientUserId: requesterTX.recipientUserId,
+                recipientUserUID: requesterTX.recipientUserUID,
+                recipientWalletId: requesterTX.recipientWalletId,
+                recipientWalletNumber: requesterTX.recipientWalletNumber,
+                fundRequestId: requesterTX.fundRequestId,
+                fundRequestUID: requesterTX.fundRequestUID,
+                initiatedAt: now,
+            });
+            await requesterTx.save({ session });
+            const requestedUserTx = new models.Transaction({
+                TXID: await generateUniqueTransactionId(),
+                userUID: requestedTX.userUID,
+                userId: requestedTX.userId,
+                walletId: requestedTX.walletId, // Wallet ID might not be needed here yet
+                walletNumber: requestedTX.walletNumber,
+                type: 'P2P_REQUEST_RECEIVE',
+                status: 'rejected',
+                amount: requestedTX.amount,
+                currency: requestedTX.currency,
+                description: `The request has been rejected for ${requester.fullName}.`,
+                senderUserId: requestedTX.senderUserId,
+                senderUserUID: requestedTX.senderUserUID,
+                senderWalletId: requestedTX.senderWalletId,
+                senderWalletNumber: requestedTX.senderWalletNumber,
+                recipientUserId: requestedTX.recipientUserId,
+                recipientUserUID: requestedTX.recipientUserUID,
+                fundRequestId: requestedTX.fundRequestId,
+                fundRequestUID: requestedTX.fundRequestUID,
+                initiatedAt: now,
+            });
+    
+            await requestedUserTx.save({ session });
+        } else if (action === 'accept') {
+            fundRequest.status = 'accepted',
+            await fundRequest.save({ session });
+        }
+
 
         await session.commitTransaction();
         session.endSession();
@@ -467,7 +509,7 @@ export const cancelFundRequest = async (req, res, next) => {
     session.startTransaction();
 
     try {
-        const fundRequest = await FundRequest.findById(requestId).session(session);
+        const fundRequest = await models.FundRequest.findById(requestId).session(session);
 
         if (!fundRequest) {
             throw new Error('Fund request not found.');
@@ -483,8 +525,8 @@ export const cancelFundRequest = async (req, res, next) => {
         fundRequest.status = 'cancelled';
         await fundRequest.save({ session });
 
-        // Update related Transaction statuses
-        await Transaction.updateMany({ fundRequestId: requestId, status: 'requested' }, { $set: { status: 'cancelled' } }).session(session);
+        // Update related models.Transaction statuses
+        await models.Transaction.updateMany({ fundRequestId: requestId, status: 'requested' }, { $set: { status: 'cancelled' } }).session(session);
 
         await session.commitTransaction();
         session.endSession();
@@ -510,8 +552,7 @@ export const cancelFundRequest = async (req, res, next) => {
  * @access Private
  */
 export const fulfillFundRequest = async (req, res, next) => {
-    // This is essentially a P2P transfer triggered by fulfilling a request
-    const fulfillerUserId = req.user._id; // The user who received the request and is now paying
+    const fulfillerUserId = req.user._id;
     const requestId = req.params.requestId;
 
     if (!requestId) {
@@ -522,114 +563,137 @@ export const fulfillFundRequest = async (req, res, next) => {
     session.startTransaction();
 
     try {
-        // 1. Find the accepted FundRequest
-        const fundRequest = await FundRequest.findById(requestId).session(session);
-        if (!fundRequest) {
-            throw new Error('Fund request not found.');
-        }
-        if (fundRequest.requestedUserId.toString() !== fulfillerUserId) {
+        const fundRequest = await models.FundRequest.findById(requestId).session(session);
+
+        if (!fundRequest) throw new Error('Fund request not found.');
+        if (fundRequest.requestedUserId.toString() !== fulfillerUserId.toString())
             throw new Error('You are not authorized to fulfill this request.');
-        }
-        if (fundRequest.status !== 'accepted') {
+        if (fundRequest.status !== 'accepted')
             throw new Error(`Cannot fulfill a request with status '${fundRequest.status}'.`);
-        }
-
-        // 2. Get involved users and wallets
-        const fulfiller = await User.findById(fulfillerUserId).populate('mainWalletId').session(session);
-        const requester = await User.findById(fundRequest.requesterUserId).populate('mainWalletId').session(session);
-
-        if (!fulfiller || !fulfiller.mainWalletId || !requester || !requester.mainWalletId) {
+        
+        const fulfiller = await models.User.findById(fulfillerUserId).populate('mainWalletId').session(session);
+        const requester = await models.User.findById(fundRequest.requesterUserId).populate('mainWalletId').session(session);
+        
+        if (!fulfiller || !fulfiller.mainWalletId || !requester || !requester.mainWalletId)
             throw new Error('Fulfiller or Requester wallet not found.');
-        }
-
+        
         const fulfillerWallet = fulfiller.mainWalletId;
         const requesterWallet = requester.mainWalletId;
-        const amount = fundRequest.amount;
-        const currency = fundRequest.currency;
+        
+        
+        let amountInUSD = await convertCurrency(fundRequest.amount, fundRequest.currency, 'USD');
+        let feeInRequesterCurrency = await convertCurrency(0.20, 'USD', requesterWallet.primaryCurrency);
+        let fulfillerAmount = await convertCurrency(fundRequest.amount, fundRequest.currency, fulfillerWallet.primaryCurrency);
+        let requesterAmount = await convertCurrency(fundRequest.amount, fundRequest.currency, requesterWallet.primaryCurrency);
+    
 
-        // 3. Check Currency & Limits
-        if (currency !== fulfillerWallet.primaryCurrency || currency !== requesterWallet.primaryCurrency) {
-            throw new Error(`Invalid currency.`);
+        if (fulfillerWallet.balance < fulfillerAmount) {
+            throw new Error('Insufficient funds.');
         }
+
         const planDetails = await getUserPlanDetails(fulfillerUserId, session);
-        if (amount > planDetails.transactionLimits.maxSingleTransaction) {
-            throw new Error(`Transaction amount exceeds the limit.`);
+        if (amountInUSD > planDetails.transactionLimits.maxSingleTransaction) {
+            throw new Error(`Transaction amount exceeds the limit of ${planDetails.transactionLimits.maxSingleTransaction} ${fulfiller.primaryCurrency}.`);
         }
-        const fee = 0; // P2P is free
-        const totalDebit = amount + fee;
 
-        // 4. Perform Atomic Balance Updates
-        await updateBalance(fulfillerWallet._id, -totalDebit, null, session);
-        await updateBalance(requesterWallet._id, amount, null, session);
+        const totalCredit = requesterAmount - feeInRequesterCurrency;
 
-        // 5. Create Fulfillment Transaction Records
         const now = new Date();
-        const fulfillerTx = new Transaction({
-            userId: fulfillerUserId,
+        const fulfillerTx = new models.Transaction({
+            TXID: await generateUniqueTransactionId(),
+            userUID: req.user.UUID,
+            userId: fulfiller._id,
             walletId: fulfillerWallet._id,
-            type: 'P2P_REQUEST_FULFILL', // Specific type for fulfilling
+            walletNumber: fulfillerWallet.walletNumber,
+            type: 'P2P_REQUEST_FULFILL',
             status: 'completed',
-            amount: amount,
-            currency: currency,
-            fee: fee,
-            netAmount: -totalDebit,
+            amount: fulfillerAmount,
+            currency: fulfillerWallet.primaryCurrency,
+            fee: 0,
+            netAmount: -fulfillerAmount,
             description: `Fulfilled request from ${requester.username}`,
+            senderUserId: fulfiller._id,
+            senderUserUID: req.user.UUID,
+            senderWalletId: fulfillerWallet._id,
+            senderWalletNumber: fulfillerWallet.walletNumber,
             recipientUserId: requester._id,
+            recipientUserUID: requester.UUID,
             recipientWalletId: requesterWallet._id,
-            fundRequestId: requestId,
+            recipientWalletNumber: requesterWallet.walletNumber,
+            fundRequestId: fundRequest._id,
+            fundRequestUID: fundRequest.REID,
             initiatedAt: now,
             completedAt: now,
         });
         await fulfillerTx.save({ session });
 
-        const requesterTx = new Transaction({
+        const requesterTx = new models.Transaction({
+            TXID: await generateUniqueTransactionId(),
+            userUID: requester.UUID,
             userId: requester._id,
             walletId: requesterWallet._id,
-            type: 'P2P_RECEIVE', // Received as part of fulfillment
+            walletNumber: requesterWallet.walletNumber,
+            type: 'P2P_RECEIVE',
             status: 'completed',
-            amount: amount,
-            currency: currency,
-            fee: 0,
-            netAmount: amount,
+            amount: requesterAmount,
+            currency: requesterWallet.primaryCurrency,
+            fee: feeInRequesterCurrency,
+            netAmount: totalCredit,
             description: `Received fulfillment from ${fulfiller.username}`,
-            senderUserId: fulfillerUserId,
+            senderUserId: fulfiller._id,
+            senderUserUID: fulfiller.UUID,
             senderWalletId: fulfillerWallet._id,
+            senderWalletNumber: fulfillerWallet.walletNumber,
+            recipientUserId: requester._id,
+            recipientUserUID: requester.UUID,
+            recipientWalletId: requesterWallet._id,
+            recipientWalletNumber: requesterWallet.walletNumber,
             relatedTransactionId: fulfillerTx._id,
-            fundRequestId: requestId,
+            relatedTransactionUID: fulfillerTx.TXID,
+            fundRequestId: fundRequest._id,
+            fundRequestIdUID: fundRequest.REID,
             initiatedAt: now,
             completedAt: now,
         });
         await requesterTx.save({ session });
 
-        fulfillerTx.relatedTransactionId = requesterTx._id;
-        await fulfillerTx.save({ session });
+        // 6. Update FundRequest Status and Fulfillment ID
+        const updatedFundRequest = new models.FundRequest({
+            REID: await generateUniqueTransactionId(),
+            REFREID: fundRequest.REID,
+            requesterUserUID: fundRequest.requesterUserUID,
+            requesterUserId: fundRequest.requesterUserId,
+            requesterWalletId: fundRequest.requesterWalletId,
+            requesterWalletNumber: fundRequest.requesterWalletNumber,
+            requestedUserId: fundRequest.requestedUserId,
+            requestedUserUID: fundRequest.requestedUserUID,
+            amount: fundRequest.amount,
+            currency: fundRequest.currency,
+            status: 'fulfilled',
+            note: fundRequest.note,
+            expiresAt: fundRequest.expiresAt,
+        });
+        await updatedFundRequest.save({ session });
 
-        // 6. Update FundRequest Status
-        fundRequest.status = 'fulfilled';
-        fundRequest.fulfillmentTransactionId = fulfillerTx._id;
-        await fundRequest.save({ session });
+        await updateBalance(fulfillerWallet._id, -fulfillerAmount, null, session);
+        await updateBalance(requesterWallet._id, totalCredit, null, session);
 
-        // 7. Update placeholder transactions created during request
-        await Transaction.updateMany(
-            { fundRequestId: requestId, status: { $in: ['pending', 'requested'] } },
-            { $set: { status: 'completed', completedAt: now } }
-        ).session(session);
-
-        // 8. Commit
         await session.commitTransaction();
         session.endSession();
 
-        // 9. Clear Cache & Notify
         await clearCache(`walletDetails:${fulfillerUserId}`);
         await clearCache(`walletDetails:${requester._id}`);
 
-        res.status(200).json({ success: true, message: 'Fund request fulfilled successfully', data: { transactionId: fulfillerTx._id } });
+        res.status(200).json({
+            success: true,
+            message: 'Fund request fulfilled successfully',
+            data: { transactionId: fulfillerTx._id }
+        });
 
     } catch (error) {
-        if (session.inTransaction()) {
-            await session.abortTransaction();
-        }
+        if (session.inTransaction()) await session.abortTransaction();
         session.endSession();
+
         console.error("Fulfill Fund Request Error:", error);
         if (error.message.includes('Insufficient funds')) {
             return res.status(400).json({ success: false, message: 'Insufficient funds.' });
@@ -640,6 +704,7 @@ export const fulfillFundRequest = async (req, res, next) => {
         next(error);
     }
 };
+
 
 /**
  * @description Initiate a withdrawal request to a linked bank account
@@ -661,7 +726,7 @@ export const initiateWithdrawal = async (req, res, next) => {
 
     try {
         // 1. Find User, Wallet, and Bank Account
-        const user = await User.findById(userId).populate('mainWalletId').session(session);
+        const user = await models.User.findById(userId).populate('mainWalletId').session(session);
         if (!user || !user.mainWalletId) {
             throw new Error('User or wallet not found.');
         }
@@ -699,11 +764,15 @@ export const initiateWithdrawal = async (req, res, next) => {
         // 4. Perform Atomic Balance Update
         await updateBalance(wallet._id, -totalDebit, null, session);
 
-        // 5. Create Withdrawal Transaction Record
+        // 5. Create Withdrawal models.Transaction Record
         const now = new Date();
-        const withdrawalTx = new Transaction({
-            userId: userId,
+        
+        const withdrawalTx = new models.Transaction({
+            TXID: await generateUniqueTransactionId(),
+            userUID: req.user.UUID,
+            userId: user._id,
             walletId: wallet._id,
+            walletNumber: wallet.walletNumber,
             type: 'WITHDRAWAL',
             status: 'pending', // Initial status, external processor will update
             amount: amount,

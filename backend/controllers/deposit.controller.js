@@ -1,10 +1,9 @@
 import mongoose from 'mongoose';
-import BinanceDepositVerification from '../models/binance-deposit-verification.model.js';
-import Wallet from '../models/wallet.model.js';
-import Transaction from '../models/transaction.model.js';
-import User from '../models/user.model.js';
-import { clearCache } from "../utils/cache.js";
+import models from '../models/index.js';
+
+import { clearCache } from "../services/utils/cache.js";
 import { BINANCE_USDT_DEPOSIT_ADDRESS, BINANCE_USDT_DEPOSIT_MEMO, BINANCE_USDT_DEPOSIT_NETWORK } from '../config/env.js';
+import { generateUniqueTransactionId } from '../services/utils/helpers.js';
 
 // Helper function for atomic balance updates (Consider moving to a shared utility)
 const updateBalance = async (walletId, amount, subWalletId = null, session = null) => {
@@ -21,7 +20,7 @@ const updateBalance = async (walletId, amount, subWalletId = null, session = nul
     }
 
     const options = { new: true, session };
-    const updatedWallet = await Wallet.findOneAndUpdate(filter, update, options);
+    const updatedWallet = await models.Wallet.findOneAndUpdate(filter, update, options);
 
     if (!updatedWallet) {
         throw new Error('Insufficient funds or wallet/sub-wallet not found.');
@@ -89,21 +88,25 @@ export const submitDepositVerification = async (req, res, next) => {
 
     try {
         // Check for duplicate Binance Transaction ID submission by this user?
-        const existingVerification = await BinanceDepositVerification.findOne({ userId, 'userProvidedInfo.binanceTxId': binanceTxId });
+        const existingVerification = await models.BinanceDepositVerification.findOne({ userId, 'userProvidedInfo.binanceTxId': binanceTxId });
         if (existingVerification) {
             return res.status(409).json({ success: false, message: `Verification for Binance TxID ${binanceTxId} already submitted.` });
         }
 
         // --- Create Transaction Record First ---
-        const user = await User.findById(userId).populate('mainWalletId');
+        const user = await models.User.findById(userId).populate('mainWalletId');
         if (!user || !user.mainWalletId) {
              console.error(`User ${userId} or their main wallet not found.`);
              return res.status(404).json({ success: false, message: 'User wallet not found.' });
         }
 
-        const depositTx = new Transaction({
+        
+        const depositTx = new models.Transaction({
+            TXID: await generateUniqueTransactionId(),
             userId: userId,
+            userUID: req.user.UUID,
             walletId: user.mainWalletId._id,
+            walletNumber: user.mainWalletId.walletNumber,
             type: 'DEPOSIT',
             status: 'pending',
             amount: amount,
@@ -113,17 +116,19 @@ export const submitDepositVerification = async (req, res, next) => {
             description: `Deposit verification submitted (Binance TxID: ${binanceTxId.slice(0, 8)}...)`,
             externalReference: binanceTxId, // Store Binance TxID here
             depositMethod: 'BINANCE_USDT',
-            depositDetails: { screenshotUrl: screenshotUrl, senderAddress: senderAddress }, // Store relevant details
+            metadata: { screenshotUrl: screenshotUrl, senderAddress: senderAddress }, // Store relevant details
             initiatedAt: new Date(),
         });
         // Save the transaction record
         await depositTx.save();
         // --- Transaction Record Created ---
 
-        // --- Create BinanceDepositVerification Record, linking to the Transaction ---
-        const verification = new BinanceDepositVerification({
-            userId,
+        // --- Create BinanceDepositVerification. Record, linking to the Transaction ---
+        const verification = new models.BinanceDepositVerification({
+            userId: userId,
+            userUID: req.user.UUID,
             depositTransactionId: depositTx._id, // Link to the created transaction
+            depositTransactionUID: depositTx.TXID,
             userProvidedInfo: {
                 binanceTxId: binanceTxId,
                 amountUSDT: amount,
@@ -135,7 +140,7 @@ export const submitDepositVerification = async (req, res, next) => {
         });
 
         await verification.save();
-        // --- BinanceDepositVerification Record Created ---
+        // --- BinanceDepositVerification. Record Created ---
 
         // Optionally, update the transaction with the verification ID if needed for bidirectional link
         // depositTx.relatedVerificationId = verification._id;
@@ -179,11 +184,11 @@ export const getDepositstatus = async (req, res, next) => {
     };
 
     try {
-        const verifications = await BinanceDepositVerification.find(query, null, options)
+        const verifications = await models.BinanceDepositVerification.find(query, null, options)
             .populate('depositTransactionId', 'status amount currency initiatedAt') // Populate related transaction info
             .select('-__v -userProvidedInfo.screenshotUrl -apiResponseData'); // Exclude fields
 
-        const totalVerifications = await BinanceDepositVerification.countDocuments(query);
+        const totalVerifications = await models.BinanceDepositVerification.countDocuments(query);
 
         res.status(200).json({
             success: true,
@@ -221,7 +226,7 @@ export const approveDeposit = async (req, res, next) => {
 
     try {
         // 1. Find the verification record and the related transaction
-        const verification = await BinanceDepositVerification.findById(verificationId).populate('depositTransactionId').session(session);
+        const verification = await models.BinanceDepositVerification.findById(verificationId).populate('depositTransactionId').session(session);
         if (!verification) {
             throw new Error('Deposit verification record not found.');
         }
@@ -236,7 +241,7 @@ export const approveDeposit = async (req, res, next) => {
         const depositTx = verification.depositTransactionId; // Already populated
 
         // 2. Find the user and their wallet
-        const user = await User.findById(verification.userId).populate('mainWalletId').session(session);
+        const user = await models.User.findById(verification.userId).populate('mainWalletId').session(session);
         if (!user || !user.mainWalletId) {
             throw new Error('User or user wallet not found.');
         }
@@ -312,7 +317,7 @@ export const rejectDeposit = async (req, res, next) => {
 
     try {
         // 1. Find the verification record and related transaction
-        const verification = await BinanceDepositVerification.findById(verificationId).populate('depositTransactionId').session(session);
+        const verification = await models.BinanceDepositVerification.findById(verificationId).populate('depositTransactionId').session(session);
         if (!verification) {
             throw new Error('Deposit verification record not found.');
         }

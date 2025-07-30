@@ -29,7 +29,7 @@ const subscriptionPlanSchema = new mongoose.Schema({
     currency: {
         type: String,
         required: true,
-        enum: ['USD', 'SAR', 'EUR'], // Match wallet currencies
+        enum: ['USD'], // Match wallet currencies
         default: 'USD'
     },
     billingCycle: {

@@ -1,6 +1,6 @@
 import os from 'os';
 import dayjs from 'dayjs';
-import getRedisClient from '../config/redis.js'; // حسب مسارك
+import { redisClient } from '../config/redis.js';
 import mongoose from 'mongoose';
 
 export async function HealthCheck() {
@@ -29,7 +29,6 @@ export async function HealthCheck() {
   // Redis status
   let redisStatus = 'Disconnected';
   try {
-    const redisClient = await getRedisClient();
     const ping = await redisClient.ping();
     if (ping === 'PONG') redisStatus = 'Connected';
   } catch {

@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 import validator from 'validator'; // Using validator library for more robust validation
-import { encrypt } from '../utils/encryption.js'; // Import encryption functions
+import { encrypt, fingerprint } from '../services/utils/encryption.js'; // Import encryption functions
 
 // Note: Sensitive data like document numbers should be encrypted at the application layer before saving.
 
@@ -13,6 +13,7 @@ const kycSchema = new mongoose.Schema({
   documentNumber: { // Encrypted field
     type: String,
     required: true,
+    unique: true,
     trim: true
   },
   frontImage: { // Store URL or path to the image
@@ -76,6 +77,12 @@ const twoFactorAuthSchema = new mongoose.Schema({
 }, { _id: false });
 
 const userSchema = new mongoose.Schema({
+  UUID: {
+    type: String,
+    required: true,
+    unique: true,
+    trim: true
+  },
   fullName: {
     type: String,
     required: [true, 'Full Name is required'],
@@ -181,7 +188,7 @@ userSchema.pre('save', function(next) {
   // Encrypt KYC document number if modified
   if (this.isModified('kyc.documentNumber') && this.kyc.documentNumber) {
     try {
-      this.kyc.documentNumber = encrypt(this.kyc.documentNumber);
+      this.kyc.documentNumber = fingerprint(this.kyc.documentNumber);
     } catch (error) {
       return next(error);
     }
