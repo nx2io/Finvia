@@ -1,7 +1,0 @@
-{
-  "name": "finvia",
-  "integrations": {
-    "capacitor": {}
-  },
-  "type": "angular-standalone"
-}

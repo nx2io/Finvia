@@ -1,0 +1,35 @@
+// For information on how to create your own theme, please see:
+// http://ionicframework.com/docs/theming/
+
+// Space & Sci-Fi Dark Theme Variables
+:root {
+  --color-background: #000000;
+  --color-surface: #1f1f1f;
+  --color-primary: #7e22ce;
+  --color-accent: #7e22ce;
+  --color-text: #e0e0e0;
+  --color-text-secondary: #b0b0b0;
+  --color-border: #2d2d2d;
+}
+
+// Ionic overrides
+:root {
+  --ion-background-color: var(--color-background);
+  --ion-background-color-rgb: 0,0,0;
+  --ion-text-color: var(--color-text);
+  --ion-text-color-rgb: 224,224,224;
+  --ion-color-primary: var(--color-primary);
+  --ion-color-primary-rgb: 126,34,206;
+  --ion-color-primary-contrast: var(--color-background);
+  --ion-color-primary-contrast-rgb: 0,0,0;
+  --ion-color-step-50: #1f1f1f;
+  --ion-color-step-100: #232323;
+  --ion-color-step-150: #262626;
+  --ion-color-step-200: #292929;
+  --ion-color-step-250: #2d2d2d;
+  --ion-color-step-300: #303030;
+  --ion-color-step-350: #333333;
+  --ion-color-step-400: #363636;
+  --ion-color-step-450: #393939;
+  --ion-color-step-500: #3d3d3d;
+}
